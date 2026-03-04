@@ -48,3 +48,28 @@ describe("sourceWalker - React.lazy imports", () => {
   });
 });
 
+describe("sourceWalker - import graph line numbers (usage vs import)", () => {
+  it("uses first usage line when importer has named import and uses it on a later line", () => {
+    const entry = p("usage-line-entry.ts");
+    const { files, importGraph } = walkSourceFiles(entry);
+    const targetPath = files.find((f) => f.endsWith("usage-line-target.ts"));
+    expect(targetPath).toBeDefined();
+    const edges = importGraph.getImporterEdges(targetPath!);
+    expect(edges).toHaveLength(1);
+    expect(edges[0].importerPath).toMatch(/usage-line-entry\.ts$/);
+    // usage-line-entry.ts: import on line 1, first use of helper() on line 6
+    expect(edges[0].importerLine).toBe(6);
+  });
+
+  it("uses import line for side-effect import (no bindings)", () => {
+    const entry = p("entry.ts");
+    const { files, importGraph } = walkSourceFiles(entry);
+    const targetPath = files.find((f) => f.endsWith("a.ts"));
+    expect(targetPath).toBeDefined();
+    const edges = importGraph.getImporterEdges(targetPath!);
+    expect(edges).toHaveLength(1);
+    // entry.ts has "import \"./a\";" on line 1, no named bindings → use import line
+    expect(edges[0].importerLine).toBe(1);
+  });
+});
+

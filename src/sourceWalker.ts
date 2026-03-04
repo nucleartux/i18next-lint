@@ -81,16 +81,81 @@ export interface ImportEdge {
   line: number;
 }
 
-function collectModuleSpecifiersWithLines(sf: ts.SourceFile): ImportEdge[] {
-  const specs: ImportEdge[] = [];
+interface SpecWithUsage {
+  specifier: string;
+  importLine: number;
+  /** Local names imported (for finding first usage). Empty for side-effect or re-export. */
+  localNames: string[];
+  /** Span of the import/export node to exclude when searching for usage. */
+  excludeStart: number;
+  excludeEnd: number;
+}
+
+function getLocalNamesFromImport(stmt: ts.ImportDeclaration): string[] {
+  const names: string[] = [];
+  if (!stmt.importClause) return names;
+  if (stmt.importClause.name) {
+    names.push(stmt.importClause.name.text);
+  }
+  if (stmt.importClause.namedBindings) {
+    if (ts.isNamedImports(stmt.importClause.namedBindings)) {
+      for (const el of stmt.importClause.namedBindings.elements) {
+        names.push(el.name.text);
+      }
+    } else if (ts.isNamespaceImport(stmt.importClause.namedBindings)) {
+      names.push(stmt.importClause.namedBindings.name.text);
+    }
+  }
+  return names;
+}
+
+/** Returns the first line (1-based) where any of localNames is used, or undefined if none. */
+function getFirstUsageLine(
+  sf: ts.SourceFile,
+  localNames: Set<string>,
+  excludeStart: number,
+  excludeEnd: number,
+): number | undefined {
+  if (localNames.size === 0) return undefined;
+  let firstLine: number | undefined;
+  function visit(node: ts.Node) {
+    if (ts.isIdentifier(node) && localNames.has(node.text)) {
+      const pos = node.getStart();
+      if (pos < excludeStart || pos >= excludeEnd) {
+        const { line } = sf.getLineAndCharacterOfPosition(pos);
+        const oneBased = line + 1;
+        if (firstLine === undefined || oneBased < firstLine) firstLine = oneBased;
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  ts.forEachChild(sf, visit);
+  return firstLine;
+}
+
+function collectModuleSpecifiersWithLines(sf: ts.SourceFile): SpecWithUsage[] {
+  const specs: SpecWithUsage[] = [];
 
   for (const stmt of sf.statements) {
     if (ts.isImportDeclaration(stmt) && ts.isStringLiteral(stmt.moduleSpecifier)) {
-      const { line } = sf.getLineAndCharacterOfPosition(stmt.getStart());
-      specs.push({ specifier: stmt.moduleSpecifier.text, line: line + 1 });
+      const importLine = sf.getLineAndCharacterOfPosition(stmt.getStart()).line + 1;
+      const localNames = getLocalNamesFromImport(stmt);
+      specs.push({
+        specifier: stmt.moduleSpecifier.text,
+        importLine,
+        localNames,
+        excludeStart: stmt.getStart(),
+        excludeEnd: stmt.getEnd(),
+      });
     } else if (ts.isExportDeclaration(stmt) && stmt.moduleSpecifier && ts.isStringLiteral(stmt.moduleSpecifier)) {
-      const { line } = sf.getLineAndCharacterOfPosition(stmt.getStart());
-      specs.push({ specifier: stmt.moduleSpecifier.text, line: line + 1 });
+      const line = sf.getLineAndCharacterOfPosition(stmt.getStart()).line + 1;
+      specs.push({
+        specifier: stmt.moduleSpecifier.text,
+        importLine: line,
+        localNames: [],
+        excludeStart: stmt.getStart(),
+        excludeEnd: stmt.getEnd(),
+      });
     }
   }
 
@@ -101,8 +166,14 @@ function collectModuleSpecifiersWithLines(sf: ts.SourceFile): ImportEdge[] {
       node.arguments.length === 1 &&
       ts.isStringLiteral(node.arguments[0])
     ) {
-      const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
-      specs.push({ specifier: node.arguments[0].text, line: line + 1 });
+      const line = sf.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+      specs.push({
+        specifier: node.arguments[0].text,
+        importLine: line,
+        localNames: [],
+        excludeStart: node.getStart(),
+        excludeEnd: node.getEnd(),
+      });
     }
     ts.forEachChild(node, visit);
   }
@@ -113,13 +184,13 @@ function collectModuleSpecifiersWithLines(sf: ts.SourceFile): ImportEdge[] {
 }
 
 export interface ImportGraph {
-  /** For each file path, the list of (importer path, line of import) that import it */
+  /** For each file path, the list of (importer path, line in importer) that import it. The line is the first usage of the import when available, otherwise the import statement line. */
   getImporterEdges(filePath: string): Array<{ importerPath: string; importerLine: number }>;
 }
 
 /**
  * Walk the module graph and return files plus an import graph.
- * The graph records for each file the (importer path, importer line) that import it.
+ * The graph records for each file the (importer path, line in importer); the line is the first usage of the import when determinable, otherwise the import statement line.
  */
 export interface WalkResult {
   files: string[];
@@ -157,7 +228,7 @@ export function walkSourceFiles(entry: string, options: WalkOptions = {}): WalkR
     const sf = parseModule(current);
     const specs = collectModuleSpecifiersWithLines(sf);
 
-    for (const { specifier, line } of specs) {
+    for (const { specifier, importLine, localNames, excludeStart, excludeEnd } of specs) {
       let resolved = resolveRelativeImport(current, specifier, extensions);
 
       if (!resolved && !specifier.startsWith(".")) {
@@ -167,8 +238,13 @@ export function walkSourceFiles(entry: string, options: WalkOptions = {}): WalkR
       if (!resolved) continue;
       if (resolved.includes("node_modules")) continue;
 
+      const usageLine =
+        localNames.length > 0
+          ? getFirstUsageLine(sf, new Set(localNames), excludeStart, excludeEnd) ?? importLine
+          : importLine;
+
       if (!graph.has(resolved)) graph.set(resolved, []);
-      graph.get(resolved)!.push({ importerPath: current, importerLine: line });
+      graph.get(resolved)!.push({ importerPath: current, importerLine: usageLine });
 
       if (visited.has(resolved)) continue;
       visited.add(resolved);
