@@ -1,0 +1,6 @@
+{
+  "name": "monorepo-workspaces-root",
+  "private": true,
+  "workspaces": ["packages/*"]
+}
+

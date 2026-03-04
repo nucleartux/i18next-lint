@@ -1,0 +1,12 @@
+{
+  "entry": "src/index.tsx",
+  "translations": [
+    {
+      "file": "src/locales/ru-numeric.json",
+      "plurals": "numeric"
+    }
+  ],
+  "contextSeparator": "_",
+  "pluralSeparator": "_"
+}
+

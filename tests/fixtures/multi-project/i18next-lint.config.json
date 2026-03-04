@@ -1,0 +1,14 @@
+[
+  {
+    "entry": "app1/src/index.tsx",
+    "translations": [{ "file": "app1/src/locales/ru.json" }],
+    "contextSeparator": "_",
+    "pluralSeparator": "_"
+  },
+  {
+    "entry": "app2/src/index.tsx",
+    "translations": [{ "file": "app2/src/locales/en.json" }],
+    "contextSeparator": "|",
+    "pluralSeparator": "."
+  }
+]

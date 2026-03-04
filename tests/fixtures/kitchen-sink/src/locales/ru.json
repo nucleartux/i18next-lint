@@ -1,0 +1,20 @@
+{
+  "simple": "Simple text",
+  "item": "Item",
+  "item_plural": "Items",
+  "item2": "Item 2",
+  "item2_0": "Item 2 zero",
+  "item2_1": "Item 2 one",
+  "gender_male": "He",
+  "gender_female": "She",
+  "status_active": "Active",
+  "status_inactive": "Inactive",
+  "welcomeUser": "Welcome user",
+  "newMessages": "You have one message",
+  "newMessages_plural": "You have {{count}} messages",
+  "alias_key": "Alias",
+  "missingPlural": "Missing plural singular",
+  "unused_key_in_kitchen": "Unused",
+  "ratings_count": "ratings_count"
+}
+

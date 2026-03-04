@@ -1,0 +1,23 @@
+{
+  "simple": "Простой текст (numeric)",
+  "item": "Элемент (numeric)",
+  "item_0": "0 элементов",
+  "item_1": "1 элемент",
+  "item_2": "2 элемента",
+  "item2": "Элемент 2 (numeric)",
+  "item2_0": "Элемент 2 (numeric)",
+  "item2_1": "Элемент 2 (numeric)",
+  "gender_male": "Он (numeric)",
+  "gender_female": "Она (numeric)",
+  "status_active": "Активен (numeric)",
+  "status_inactive": "Неактивен (numeric)",
+  "welcomeUser": "Добро пожаловать (numeric)",
+  "newMessages": "У вас одно сообщение (numeric)",
+  "newMessages_0": "У вас нет сообщений (numeric)",
+  "newMessages_1": "У вас одно сообщение (numeric)",
+  "newMessages_2": "У вас {{count}} сообщения (numeric)",
+  "alias_key": "Алиас (numeric)",
+  "missingPlural": "Отсутствуют формы множественного (numeric)",
+  "ratings_count_0": "ratings_count"
+}
+

@@ -1,0 +1,7 @@
+{
+  "entry": "packages/app/src/test.tsx",
+  "translations": ["packages/app/src/locales/ru.json"],
+  "contextSeparator": "_",
+  "pluralSeparator": "_"
+}
+
