@@ -89,6 +89,28 @@ You can lint several apps in one run by using an array of configs (e.g. in a mon
 ]
 ```
 
+## Supported syntax in code
+
+The linter only considers translation keys that it can resolve **statically** (at parse time). The following are **supported**:
+
+| Syntax | Example |
+|--------|---------|
+| `t()` with string literal | `t("key")`, `t('key')` |
+| `t()` with options object | `t("key", { count: 1 })`, `t("key", { context: "male" })` (static or dynamic `count`/`context`) |
+| `useTranslation()` / named `t` | Same as above when the first argument to `t(...)` is a string literal |
+| i18next default import | `i18n.t("key")` (when `i18n` is the default import from `i18next`) |
+| `<Trans>` component | `i18nKey="key"`, `i18nKey={'key'}`, `i18nKey={\`key\`}` (no interpolation), or conditional `i18nKey={cond ? "a" : "b"}` |
+
+The following are **not** supported (keys are not extracted, so they are not checked for missing/extra):
+
+| Syntax | Example |
+|--------|---------|
+| Dynamic key in `t()` | `t(keyVariable)`, `t(KEY_CONST)` |
+| Template literal with interpolation | `t(\`key.${id}\`)` |
+| Dynamic key in `<Trans>` | `i18nKey={keyVariable}` |
+
+If you use dynamic keys, the linter will not report them as missing and will not count them as “used” when detecting extra keys in your JSON.
+
 ## What it reports
 
 - **Missing keys** — keys used in code (e.g. `t('foo')`) that are not in your translation files, with file and line.
