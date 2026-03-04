@@ -8,7 +8,7 @@
     "i18next-lint": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "bun build ./src/cli.ts --outdir=dist --target=node --minify",
     "test": "bun test"
   },
   "dependencies": {
