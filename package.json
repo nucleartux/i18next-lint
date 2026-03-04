@@ -7,7 +7,7 @@
   "author": "Igor Adrov <nucleartux@gmail.com> (https://github.com/nucleartux)",
   "license": "MIT",
   "homepage": "https://github.com/nucleartux/i18next-lint#readme",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "CLI tool to find unused and missing i18next translation keys in React projects.",
   "type": "module",
   "files": [
