@@ -76,26 +76,33 @@ function resolveRelativeImport(fromFile: string, specifier: string, extensions: 
   return resolveWithExtensions(raw, extensions);
 }
 
-function collectModuleSpecifiers(sf: ts.SourceFile): string[] {
-  const specs: string[] = [];
+export interface ImportEdge {
+  specifier: string;
+  line: number;
+}
+
+function collectModuleSpecifiersWithLines(sf: ts.SourceFile): ImportEdge[] {
+  const specs: ImportEdge[] = [];
 
   for (const stmt of sf.statements) {
     if (ts.isImportDeclaration(stmt) && ts.isStringLiteral(stmt.moduleSpecifier)) {
-      specs.push(stmt.moduleSpecifier.text);
+      const { line } = sf.getLineAndCharacterOfPosition(stmt.getStart());
+      specs.push({ specifier: stmt.moduleSpecifier.text, line: line + 1 });
     } else if (ts.isExportDeclaration(stmt) && stmt.moduleSpecifier && ts.isStringLiteral(stmt.moduleSpecifier)) {
-      specs.push(stmt.moduleSpecifier.text);
+      const { line } = sf.getLineAndCharacterOfPosition(stmt.getStart());
+      specs.push({ specifier: stmt.moduleSpecifier.text, line: line + 1 });
     }
   }
 
   function visit(node: ts.Node) {
-    // Dynamic import('...')
     if (
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&
       node.arguments.length === 1 &&
       ts.isStringLiteral(node.arguments[0])
     ) {
-      specs.push(node.arguments[0].text);
+      const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
+      specs.push({ specifier: node.arguments[0].text, line: line + 1 });
     }
     ts.forEachChild(node, visit);
   }
@@ -105,16 +112,33 @@ function collectModuleSpecifiers(sf: ts.SourceFile): string[] {
   return specs;
 }
 
+export interface ImportGraph {
+  /** For each file path, the list of (importer path, line of import) that import it */
+  getImporterEdges(filePath: string): Array<{ importerPath: string; importerLine: number }>;
+}
+
+/**
+ * Walk the module graph and return files plus an import graph.
+ * The graph records for each file the (importer path, importer line) that import it.
+ */
+export interface WalkResult {
+  files: string[];
+  importGraph: ImportGraph;
+  entryPaths: string[];
+}
+
 /**
  * Walk the module graph starting from an entry file and return all reachable
  * source files (including the entry). By default this follows only relative
  * imports. When a rootDir is provided and it is a workspace root, imports
  * that resolve to workspace packages may also be followed.
  */
-export function walkSourceFiles(entry: string, options: WalkOptions = {}): string[] {
+export function walkSourceFiles(entry: string, options: WalkOptions = {}): WalkResult {
   const extensions = options.extensions ?? DEFAULT_EXTENSIONS;
   const visited = new Set<string>();
   const queue: string[] = [];
+  const entryPaths: string[] = [];
+  const graph = new Map<string, Array<{ importerPath: string; importerLine: number }>>();
 
   const start = resolve(entry);
   if (!existsSync(start) || !statSync(start).isFile()) {
@@ -126,27 +150,42 @@ export function walkSourceFiles(entry: string, options: WalkOptions = {}): strin
 
   queue.push(start);
   visited.add(start);
+  entryPaths.push(start);
 
   while (queue.length > 0) {
     const current = queue.shift()!;
     const sf = parseModule(current);
-    const specs = collectModuleSpecifiers(sf);
+    const specs = collectModuleSpecifiersWithLines(sf);
 
-    for (const spec of specs) {
-      let resolved = resolveRelativeImport(current, spec, extensions);
+    for (const { specifier, line } of specs) {
+      let resolved = resolveRelativeImport(current, specifier, extensions);
 
-      if (!resolved && !spec.startsWith(".")) {
-        resolved = packageResolver(current, spec);
+      if (!resolved && !specifier.startsWith(".")) {
+        resolved = packageResolver(current, specifier);
       }
 
       if (!resolved) continue;
       if (resolved.includes("node_modules")) continue;
+
+      if (!graph.has(resolved)) graph.set(resolved, []);
+      graph.get(resolved)!.push({ importerPath: current, importerLine: line });
+
       if (visited.has(resolved)) continue;
       visited.add(resolved);
       queue.push(resolved);
     }
   }
 
-  return Array.from(visited).sort();
+  const importGraph: ImportGraph = {
+    getImporterEdges(filePath: string) {
+      return graph.get(filePath) ?? [];
+    },
+  };
+
+  return {
+    files: Array.from(visited).sort(),
+    importGraph,
+    entryPaths,
+  };
 }
 

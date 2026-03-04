@@ -11,7 +11,7 @@ describe("analyzeProject - integration of core pieces", () => {
   it("reports extra keys from translations when there are no usages", () => {
     const configPath = join(fixturesSimpleExtra, "i18next-lint.config.json");
     const [resolved] = loadConfig(configPath);
-    const result = analyzeProject(resolved);
+    const { result } = analyzeProject(resolved);
 
     expect(result.missingKeys).toEqual([]);
     expect(result.extraKeys).toEqual(["unused_key"]);
@@ -20,7 +20,7 @@ describe("analyzeProject - integration of core pieces", () => {
   it("follows workspace package imports in a monorepo", () => {
     const configPath = join(fixturesMonorepo, "i18next-lint.config.json");
     const [resolved] = loadConfig(configPath);
-    const result = analyzeProject(resolved);
+    const { result } = analyzeProject(resolved);
 
     expect(result.missingKeys).toEqual([]);
     expect(result.extraKeys).toEqual([]);
@@ -29,7 +29,7 @@ describe("analyzeProject - integration of core pieces", () => {
   it("analyzes from multiple entries (array config) with merged file set", () => {
     const configPath = join(fixturesKitchenSink, "i18next-lint.config.entry-array.json");
     const [resolved] = loadConfig(configPath);
-    const result = analyzeProject(resolved);
+    const { result } = analyzeProject(resolved);
 
     expect(resolved.entry).toHaveLength(2);
     expect(result.missingKeys.sort()).toEqual(["missingPlural", "number_key", "ratings_count"]);
@@ -39,7 +39,7 @@ describe("analyzeProject - integration of core pieces", () => {
   it("analyzes from glob entry pattern", () => {
     const configPath = join(fixturesKitchenSink, "i18next-lint.config.entry-glob.json");
     const [resolved] = loadConfig(configPath);
-    const result = analyzeProject(resolved);
+    const { result } = analyzeProject(resolved);
 
     expect(resolved.entry.length).toBeGreaterThanOrEqual(1);
     expect(result.missingKeys.sort()).toEqual(["missingPlural", "number_key", "ratings_count"]);

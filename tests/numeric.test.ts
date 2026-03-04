@@ -9,7 +9,7 @@ describe("numeric sink integration", () => {
   it("handles mixed simple, plural, context, Trans, and multiple files", () => {
     const configPath = join(fixturesRoot, "i18next-lint.config.json");
     const [resolved] = loadConfig(configPath);
-    const result = analyzeProject(resolved);
+    const { result } = analyzeProject(resolved);
 
     expect(result.missingKeys.sort()).toEqual(
       ["missingPlural", "ratings_count"].sort(),

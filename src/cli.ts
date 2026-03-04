@@ -2,7 +2,8 @@
 import { argv, exit } from "node:process";
 import { resolve, relative } from "node:path";
 import { loadConfig } from "./config";
-import { analyzeProject } from "./analyzeProject";
+import { analyzeProject, type AnalyzeProjectResult } from "./analyzeProject";
+import { buildMissingKeyChains } from "./chainBuilder";
 import type { ProjectAnalysisResult } from "./types";
 import type { ResolvedConfig } from "./config";
 
@@ -91,7 +92,7 @@ function mergeResults(results: ProjectAnalysisResult[]): ProjectAnalysisResult {
 
 function printHumanReadable(
   missingKeys: string[],
-  missingKeyLocations: Record<string, Array<{ filePath: string; line: number }>>,
+  missingKeyChains: Record<string, string[]>,
   missingKeyUsageTypes: Record<string, string>,
   extraKeys: string[],
   missingKeysByLanguage: Record<string, string[]>,
@@ -127,11 +128,11 @@ function printHumanReadable(
       const usageLabel = missingKeyUsageTypes[key] ? ` — "${missingKeyUsageTypes[key]}"` : "";
       // eslint-disable-next-line no-console
       console.log(`  - ${key}${usageLabel}${langList}`);
-      const locations = missingKeyLocations[key];
-      if (locations?.length) {
-        for (const loc of locations) {
+      const chains = missingKeyChains[key];
+      if (chains?.length) {
+        for (const chain of chains) {
           // eslint-disable-next-line no-console
-          console.log(`      ${loc.filePath}:${loc.line}`);
+          console.log(`      ${chain}`);
         }
       }
     }
@@ -169,59 +170,62 @@ async function main(): Promise<void> {
     exit(1);
   }
 
-  const results = configs.map((c) => analyzeProject(c));
-  const merged = mergeResults(results);
+  const projectResults: AnalyzeProjectResult[] = configs.map((c) => analyzeProject(c));
+  const merged = mergeResults(projectResults.map((r) => r.result));
   const rootDir = configs[0].rootDir;
+  const toRelative = (p: string) => relative(rootDir, p);
 
   const locationsRelativeToRoot: Record<string, Array<{ filePath: string; line: number }>> = {};
   for (const key of Object.keys(merged.missingKeyLocations)) {
     locationsRelativeToRoot[key] = merged.missingKeyLocations[key].map((loc) => ({
-      filePath: relative(rootDir, loc.filePath),
+      filePath: toRelative(loc.filePath),
       line: loc.line,
     }));
   }
 
+  const allGraphs = projectResults.map((r) => ({ importGraph: r.importGraph, entryPaths: r.entryPaths }));
+  const mergedChains = buildMissingKeyChains(merged.missingKeyLocations, allGraphs, toRelative);
+
   if (args.json) {
+    const jsonPayload: Record<string, unknown> = {
+      missingKeys: merged.missingKeys,
+      missingKeyLocations: locationsRelativeToRoot,
+      missingKeyChains: mergedChains,
+      missingKeyUsageTypes: merged.missingKeyUsageTypes,
+      extraKeys: merged.extraKeys,
+      missingKeysByLanguage: merged.missingKeysByLanguage,
+      extraKeysByLanguage: merged.extraKeysByLanguage,
+    };
     // eslint-disable-next-line no-console
-    console.log(
-      JSON.stringify(
-        {
-          missingKeys: merged.missingKeys,
-          missingKeyLocations: locationsRelativeToRoot,
-          missingKeyUsageTypes: merged.missingKeyUsageTypes,
-          extraKeys: merged.extraKeys,
-          missingKeysByLanguage: merged.missingKeysByLanguage,
-          extraKeysByLanguage: merged.extraKeysByLanguage,
-        },
-        null,
-        2,
-      ),
-    );
+    console.log(JSON.stringify(jsonPayload, null, 2));
   } else {
     if (configs.length > 1) {
-      results.forEach((result, i) => {
+      projectResults.forEach((pr, i) => {
         const title = projectTitle(configs[i], i, configs.length);
-        const relLocations: Record<string, Array<{ filePath: string; line: number }>> = {};
-        for (const key of Object.keys(result.missingKeyLocations)) {
-          relLocations[key] = result.missingKeyLocations[key].map((loc) => ({
-            filePath: relative(rootDir, loc.filePath),
-            line: loc.line,
-          }));
-        }
+        const chains = buildMissingKeyChains(
+          pr.result.missingKeyLocations,
+          [{ importGraph: pr.importGraph, entryPaths: pr.entryPaths }],
+          toRelative,
+        );
         printHumanReadable(
-          result.missingKeys,
-          relLocations,
-          result.missingKeyUsageTypes,
-          result.extraKeys,
-          result.missingKeysByLanguage,
-          result.extraKeysByLanguage,
+          pr.result.missingKeys,
+          chains,
+          pr.result.missingKeyUsageTypes,
+          pr.result.extraKeys,
+          pr.result.missingKeysByLanguage,
+          pr.result.extraKeysByLanguage,
           title,
         );
       });
     } else {
+      const chains = buildMissingKeyChains(
+        merged.missingKeyLocations,
+        allGraphs,
+        toRelative,
+      );
       printHumanReadable(
         merged.missingKeys,
-        locationsRelativeToRoot,
+        chains,
         merged.missingKeyUsageTypes,
         merged.extraKeys,
         merged.missingKeysByLanguage,

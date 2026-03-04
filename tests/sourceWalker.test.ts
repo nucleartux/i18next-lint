@@ -12,7 +12,7 @@ function p(relative: string): string {
 describe("sourceWalker - static imports", () => {
   it("collects files reachable via static relative imports", () => {
     const entry = p("entry.ts");
-    const files = walkSourceFiles(entry);
+    const { files } = walkSourceFiles(entry);
     const rel = files.map((f) => f.replace(fixturesDir + "/", "")).sort();
     expect(rel).toEqual(["a.ts", "b.ts", "c.ts", "entry.ts"]);
   });
@@ -21,7 +21,7 @@ describe("sourceWalker - static imports", () => {
 describe("sourceWalker - workspace package imports", () => {
   it("includes files imported from workspace packages", () => {
     const entry = resolve(monorepoDir, "packages/app/src/test.tsx");
-    const files = walkSourceFiles(entry, { rootDir: monorepoDir });
+    const { files } = walkSourceFiles(entry, { rootDir: monorepoDir });
     const rel = files.map((f) => f.replace(monorepoDir + "/", "")).sort();
 
     expect(rel).toEqual(["packages/app/src/test.tsx", "packages/common/scripts/header.tsx", "packages/ui/src/button.tsx"].sort());
@@ -33,7 +33,7 @@ describe("sourceWalker - workspace package imports", () => {
 describe("sourceWalker - dynamic imports", () => {
   it("includes files imported via dynamic import()", () => {
     const entry = p("entry.dynamic.ts");
-    const files = walkSourceFiles(entry);
+    const { files } = walkSourceFiles(entry);
     const rel = files.map((f) => f.replace(fixturesDir + "/", "")).sort();
     expect(rel).toEqual(["dynamicTarget.ts", "entry.dynamic.ts"]);
   });
@@ -42,7 +42,7 @@ describe("sourceWalker - dynamic imports", () => {
 describe("sourceWalker - React.lazy imports", () => {
   it("includes lazily imported components", () => {
     const entry = p("entry.lazy.tsx");
-    const files = walkSourceFiles(entry);
+    const { files } = walkSourceFiles(entry);
     const rel = files.map((f) => f.replace(fixturesDir + "/", "")).sort();
     expect(rel).toEqual(["LazyComponent.tsx", "entry.lazy.tsx"]);
   });

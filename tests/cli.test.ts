@@ -67,11 +67,18 @@ describe("CLI output", () => {
     expect(stdout).toMatch(/Missing keys:|Extra keys:/);
   });
 
+  it("prints dependency chain for missing keys (entry -> ... -> usage)", async () => {
+    const { stdout } = await runCli(kitchenSinkRoot);
+    expect(stdout).toContain("Missing keys:");
+    expect(stdout).toMatch(/->/);
+  });
+
   it("outputs valid JSON with --json flag", async () => {
     const { stdout } = await runCli(projectCleanRoot, ["--json"]);
     const data = JSON.parse(stdout);
     expect(data).toHaveProperty("missingKeys");
     expect(data).toHaveProperty("missingKeyLocations");
+    expect(data).toHaveProperty("missingKeyChains");
     expect(data).toHaveProperty("missingKeyUsageTypes");
     expect(data).toHaveProperty("extraKeys");
     expect(data).toHaveProperty("missingKeysByLanguage");

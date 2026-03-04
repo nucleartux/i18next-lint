@@ -113,7 +113,7 @@ If you use dynamic keys, the linter will not report them as missing and will not
 
 ## What it reports
 
-- **Missing keys** — keys used in code (e.g. `t('foo')`) that are not in your translation files, with file and line.
+- **Missing keys** — keys used in code (e.g. `t('foo')`) that are not in your translation files. For each usage, the report shows the **dependency chain** from an entry file to the usage (e.g. `src/App.tsx:5 -> src/utils.ts:12`), so you can see how the key is reached.
 - **Extra keys** — keys present in translation files that are never used in the scanned source.
 
 Missing keys show which usage type applies (`singular` or `plural`) and which language files are missing the key. Extra keys show which language files contain them.
@@ -126,6 +126,7 @@ With `--json`, the tool prints a single object:
 {
   "missingKeys": ["some.key"],
   "missingKeyLocations": { "some.key": [{ "filePath": "src/App.tsx", "line": 10 }] },
+  "missingKeyChains": { "some.key": ["src/index.tsx:3 -> src/App.tsx:10"] },
   "missingKeyUsageTypes": { "some.key": "singular" },
   "extraKeys": ["unused.key"],
   "missingKeysByLanguage": { "some.key": ["en", "ru"] },
@@ -133,7 +134,7 @@ With `--json`, the tool prints a single object:
 }
 ```
 
-Paths in `missingKeyLocations` are relative to the project root.
+Paths in `missingKeyLocations` and each chain in `missingKeyChains` are relative to the project root. Each chain is `entry:line -> ... -> file:line` of the usage.
 
 ## License
 
