@@ -52,6 +52,12 @@ export interface LintConfig {
    * Default: "_"
    */
   pluralSeparator?: string;
+
+  /**
+   * When true, only report extra/missing keys for code that is reachable from entry points.
+   * Default: false (all usages in discovered files count as used).
+   */
+  deadCodeDetection?: boolean;
 }
 
 /**
@@ -86,6 +92,16 @@ export interface UsageLocation {
   column: number;
 }
 
+/** Enclosing function or module for a usage; used for dead-code reachability. */
+export interface EnclosingDeclaration {
+  filePath: string;
+  lineStart: number;
+  lineEnd: number;
+  name?: string;
+  /** True when usage is at top level (no enclosing function). */
+  isModule?: boolean;
+}
+
 export interface Usage {
   base: string;
   kind: UsageKind;
@@ -93,6 +109,8 @@ export interface Usage {
   hasContext: boolean;
   hasPlural: boolean;
   location: UsageLocation;
+  /** Set when extracting for dead-code detection; which declaration contains this usage. */
+  enclosingDeclaration?: EnclosingDeclaration;
 }
 
 export interface MissingKeyLocation {
