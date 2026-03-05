@@ -42,6 +42,56 @@ describe("loadConfig - entry normalization", () => {
     resolved.entry.forEach((p) => expect(p).toEndWith(".tsx"));
   });
 
+  it("throws when translations is missing", async () => {
+    const configPath = join(fixturesSimpleExtra, "i18next-lint.config.json");
+    const raw = await Bun.file(configPath).text();
+    const parsed = JSON.parse(raw);
+    delete parsed.translations;
+    const tmp = join(fixturesSimpleExtra, "i18next-lint.config.tmp.json");
+    await Bun.write(tmp, JSON.stringify(parsed));
+    try {
+      expect(() => loadConfig(tmp)).toThrow("Config missing required field: translations (non-empty array)");
+    } finally {
+      try {
+        unlinkSync(tmp);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  it("throws when translations is empty array", async () => {
+    const configPath = join(fixturesSimpleExtra, "i18next-lint.config.json");
+    const raw = await Bun.file(configPath).text();
+    const parsed = JSON.parse(raw);
+    parsed.translations = [];
+    const tmp = join(fixturesSimpleExtra, "i18next-lint.config.tmp.json");
+    await Bun.write(tmp, JSON.stringify(parsed));
+    try {
+      expect(() => loadConfig(tmp)).toThrow("Config missing required field: translations (non-empty array)");
+    } finally {
+      try {
+        unlinkSync(tmp);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  it("throws when config is empty array", async () => {
+    const tmp = join(fixturesSimpleExtra, "i18next-lint.config.tmp.json");
+    await Bun.write(tmp, "[]");
+    try {
+      expect(() => loadConfig(tmp)).toThrow("Config must be a non-empty object or array of project configs");
+    } finally {
+      try {
+        unlinkSync(tmp);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
   it("throws when entry is missing", async () => {
     const configPath = join(fixturesSimpleExtra, "i18next-lint.config.json");
     const raw = await Bun.file(configPath).text();
