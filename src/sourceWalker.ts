@@ -210,10 +210,14 @@ export interface ImportGraph {
  * Walk the module graph and return files plus an import graph.
  * The graph records for each file the (importer path, line in importer); the line is the first usage of the import when determinable, otherwise the import statement line.
  */
+export type SourceFileCache = Map<string, ts.SourceFile>;
+
 export interface WalkResult {
   files: string[];
   importGraph: ImportGraph;
   entryPaths: string[];
+  /** Parsed source files from the walk; can be reused to avoid re-parsing. */
+  sourceFileCache: SourceFileCache;
 }
 
 /**
@@ -241,9 +245,15 @@ export function walkSourceFiles(entry: string, options: WalkOptions = {}): WalkR
   visited.add(start);
   entryPaths.push(start);
 
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const sf = parseModule(current);
+  const sourceFileCache: SourceFileCache = new Map();
+
+  for (let head = 0; head < queue.length; head++) {
+    const current = queue[head];
+    let sf = sourceFileCache.get(current);
+    if (!sf) {
+      sf = parseModule(current);
+      sourceFileCache.set(current, sf);
+    }
     const specs = collectModuleSpecifiersWithLines(sf);
 
     for (const { specifier, importLine, localNames, excludeStart, excludeEnd } of specs) {
@@ -280,6 +290,7 @@ export function walkSourceFiles(entry: string, options: WalkOptions = {}): WalkR
     files: Array.from(visited).sort(),
     importGraph,
     entryPaths,
+    sourceFileCache,
   };
 }
 

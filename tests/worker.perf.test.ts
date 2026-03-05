@@ -26,8 +26,8 @@ const UPDATE_PERF_BASELINE = process.env.UPDATE_PERF_BASELINE === "1";
 const REGRESSION_TOLERANCE = 1.03;
 
 const WARMUP_RUNS = 2;
-const BENCH_RUNS = 15;
-const WORKER_BENCH_RUNS = 10;
+const BENCH_RUNS = 50;
+const WORKER_BENCH_RUNS = 20;
 
 export type PerfBaseline = Record<string, number>;
 

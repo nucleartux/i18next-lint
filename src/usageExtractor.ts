@@ -266,12 +266,11 @@ function classifyUsage(
   return "simple";
 }
 
-export function extractUsagesFromSource(
-  code: string,
-  filePath: string,
+function extractUsagesFromSourceFile(
+  sourceFile: ts.SourceFile,
   options: UsageExtractionOptions,
 ): Usage[] {
-  const sourceFile = createSourceFile(filePath, code);
+  const filePath = sourceFile.fileName;
   const { contextSeparator } = options;
 
   const { useTranslationNames, transComponentNames, i18nextTFunctionNames, i18nextTFunctionTypeNames, i18nextDefaultNames, reactI18nextDefaultNames } = collectImports(sourceFile);
@@ -501,7 +500,24 @@ export function extractUsagesFromSource(
   return usages;
 }
 
-export function extractUsagesFromFile(filePath: string, options: UsageExtractionOptions): Usage[] {
+export function extractUsagesFromSource(
+  code: string,
+  filePath: string,
+  options: UsageExtractionOptions,
+): Usage[] {
+  const sourceFile = createSourceFile(filePath, code);
+  return extractUsagesFromSourceFile(sourceFile, options);
+}
+
+export function extractUsagesFromFile(
+  filePath: string,
+  options: UsageExtractionOptions,
+  sourceFileCache?: Map<string, ts.SourceFile>,
+): Usage[] {
+  const cached = sourceFileCache?.get(filePath);
+  if (cached) {
+    return extractUsagesFromSourceFile(cached, options);
+  }
   const code = readFileSync(filePath, "utf8");
   return extractUsagesFromSource(code, filePath, options);
 }

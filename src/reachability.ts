@@ -671,6 +671,7 @@ export function isUsageReachable(
 
 /**
  * Filter usages to only those in reachable (used) code.
+ * If initialCache is provided (e.g. from the source walk), it is reused to avoid re-parsing.
  */
 export function filterReachableUsages(
   usages: Usage[],
@@ -678,12 +679,15 @@ export function filterReachableUsages(
   entryPaths: string[],
   importGraph: ImportGraph,
   rootDir: string,
+  initialCache?: SourceFileCache,
 ): Usage[] {
   const entrySet = new Set(entryPaths);
   const filesSet = new Set(files);
-  const cache: SourceFileCache = new Map();
-  for (const file of files) {
-    cache.set(file, parseModule(file));
+  const cache: SourceFileCache = initialCache ?? new Map();
+  if (!initialCache) {
+    for (const file of files) {
+      cache.set(file, parseModule(file));
+    }
   }
   const usedExports = computeUsedExports(files, importGraph, rootDir, cache);
   const usedDeclarations = computeUsedDeclarations(files, entrySet, usedExports, cache);
