@@ -9,6 +9,7 @@ const fixturesDynamicNamed = join(import.meta.dir, "fixtures", "project-dead-cod
 const fixturesDynamicAwait = join(import.meta.dir, "fixtures", "project-dead-code-dynamic-await");
 const fixturesRoutes = join(import.meta.dir, "fixtures", "project-dead-code-routes");
 const fixturesDynamicUnused = join(import.meta.dir, "fixtures", "project-dead-code-dynamic-unused");
+const fixturesHoc = join(import.meta.dir, "fixtures", "project-dead-code-hoc");
 
 describe("dead code detection", () => {
   it("reports key2 and comp2 as extra when deadCodeDetection is true", () => {
@@ -26,6 +27,14 @@ describe("dead code detection", () => {
     const { result } = analyzeProject(resolved);
     expect(result.extraKeys).toEqual([]);
     expect(result.missingKeys).toEqual([]);
+  });
+
+  it("component passed as HOC argument (e.g. withHOC(InnerContent)): inner component's keys are used, not extra", () => {
+    const configPath = join(fixturesHoc, "i18next-lint.config.json");
+    const [resolved] = loadConfig(configPath);
+    const { result } = analyzeProject(resolved);
+    expect(result.missingKeys).toEqual([]);
+    expect(result.extraKeys).toEqual([]);
   });
 });
 

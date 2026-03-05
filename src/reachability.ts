@@ -456,6 +456,22 @@ function getExportNamesOfDeclaration(_filePath: string, decl: DeclarationInfo): 
 }
 
 /**
+ * True if this identifier node is a declaration site (name being declared), not a reference.
+ */
+function isDeclarationSite(node: ts.Identifier): boolean {
+  const parent = node.parent;
+  if (!parent) return false;
+  if (ts.isVariableDeclaration(parent) && parent.name === node) return true;
+  if (ts.isFunctionDeclaration(parent) && parent.name === node) return true;
+  if (ts.isClassDeclaration(parent) && parent.name === node) return true;
+  if (ts.isParameter(parent) && parent.name === node) return true;
+  if (ts.isImportSpecifier(parent) && parent.name === node) return true;
+  if (ts.isImportClause(parent) && parent.name === node) return true;
+  if (ts.isNamespaceImport(parent) && parent.name === node) return true;
+  return false;
+}
+
+/**
  * Which local declaration names does this declaration reference (call or JSX)?
  */
 function getReferencedLocalNames(
@@ -484,6 +500,10 @@ function getReferencedLocalNames(
       if (ts.isIdentifier(tagName) && allDeclNames.has(tagName.text)) {
         refs.add(tagName.text);
       }
+    }
+    // Any identifier used as a value (e.g. argument to a function like withLoaderSuspense(InternalModalContent))
+    if (ts.isIdentifier(node) && allDeclNames.has(node.text) && !isDeclarationSite(node)) {
+      refs.add(node.text);
     }
     ts.forEachChild(node, visit);
   }
