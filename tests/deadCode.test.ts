@@ -8,6 +8,7 @@ const fixturesLazy = join(import.meta.dir, "fixtures", "project-dead-code-lazy")
 const fixturesDynamicNamed = join(import.meta.dir, "fixtures", "project-dead-code-dynamic-named");
 const fixturesDynamicAwait = join(import.meta.dir, "fixtures", "project-dead-code-dynamic-await");
 const fixturesRoutes = join(import.meta.dir, "fixtures", "project-dead-code-routes");
+const fixturesDynamicUnused = join(import.meta.dir, "fixtures", "project-dead-code-dynamic-unused");
 
 describe("dead code detection", () => {
   it("reports key2 and comp2 as extra when deadCodeDetection is true", () => {
@@ -59,5 +60,13 @@ describe("dead code detection - dynamic imports", () => {
     const { result } = analyzeProject(resolved);
     expect(result.missingKeys).toEqual([]);
     expect(result.extraKeys.sort()).toEqual([]);
+  });
+
+  it("lazy(() => import(\"./Page\")) but variable never used: Page is dead, its keys are extra", () => {
+    const configPath = join(fixturesDynamicUnused, "i18next-lint.config.json");
+    const [resolved] = loadConfig(configPath);
+    const { result } = analyzeProject(resolved);
+    expect(result.missingKeys).toEqual([]);
+    expect(result.extraKeys.sort()).toEqual(["page_key"]);
   });
 });
