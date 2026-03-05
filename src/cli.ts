@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 import { argv, exit } from "node:process";
-import { resolve, relative } from "node:path";
+import { resolve, relative, dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
 import { loadConfig } from "./config";
 import { analyzeProject, type AnalyzeProjectResult } from "./analyzeProject";
 import { buildMissingKeyChains } from "./chainBuilder";
 import type { ProjectAnalysisResult } from "./types";
 import type { ResolvedConfig } from "./config";
+import type { SerializedAnalyzeProjectResult } from "./worker";
+import type { ImportGraph } from "./sourceWalker";
 
 interface CliArgs {
   configPath?: string;
@@ -155,6 +160,65 @@ function projectTitle(config: ResolvedConfig, index: number, total: number): str
   return total > 1 ? `Project ${index + 1}: ${label}` : "";
 }
 
+function getWorkerPath(): string {
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const isSource = import.meta.url.endsWith(".ts");
+  const distWorker = join(dir, "..", "dist", "worker.js");
+  if (isSource && existsSync(distWorker)) {
+    return resolve(distWorker);
+  }
+  const ext = isSource ? ".ts" : ".js";
+  return join(dir, `worker${ext}`);
+}
+
+function deserializeWorkerResult(payload: SerializedAnalyzeProjectResult): AnalyzeProjectResult {
+  const graphData = payload.graphData;
+  const importGraph: ImportGraph = {
+    getImporterEdges(filePath: string) {
+      return graphData[filePath] ?? [];
+    },
+  };
+  return {
+    result: {
+      ...payload.result,
+      usedKeys: new Set(payload.result.usedKeys),
+      translationKeys: new Set(payload.result.translationKeys),
+    },
+    importGraph,
+    entryPaths: payload.entryPaths,
+  };
+}
+
+function runProjectInWorker(
+  config: ResolvedConfig,
+  workerPath: string,
+  index: number,
+  total: number,
+): Promise<AnalyzeProjectResult> {
+  return new Promise((resolve, reject) => {
+    if (total > 1) {
+      process.stderr.write(`Running ${index + 1}/${total}\n`);
+    }
+    const worker = new Worker(workerPath, {
+      workerData: { config },
+    });
+    worker.on("message", (payload: SerializedAnalyzeProjectResult | { error: string }) => {
+      worker.terminate();
+      if ("error" in payload) {
+        reject(new Error(payload.error));
+      } else {
+        resolve(deserializeWorkerResult(payload));
+      }
+    });
+    worker.on("error", reject);
+    worker.on("exit", (code) => {
+      if (code !== 0) {
+        reject(new Error(`Worker exited with code ${code}`));
+      }
+    });
+  });
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(argv.slice(2));
   const configPath = args.configPath
@@ -170,7 +234,19 @@ async function main(): Promise<void> {
     exit(1);
   }
 
-  const projectResults: AnalyzeProjectResult[] = configs.map((c) => analyzeProject(c));
+  const total = configs.length;
+  let projectResults: AnalyzeProjectResult[];
+
+  if (total > 1) {
+    const workerPath = getWorkerPath();
+    projectResults = await Promise.all(
+      configs.map((config, index) =>
+        runProjectInWorker(config, workerPath, index, total),
+      ),
+    );
+  } else {
+    projectResults = [analyzeProject(configs[0])];
+  }
   const merged = mergeResults(projectResults.map((r) => r.result));
   const rootDir = configs[0].rootDir;
   const toRelative = (p: string) => relative(rootDir, p);

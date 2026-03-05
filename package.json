@@ -11,13 +11,13 @@
   "description": "CLI tool to find unused and missing i18next translation keys in React projects.",
   "type": "module",
   "files": [
-    "dist/cli.js"
+    "dist"
   ],
   "bin": {
     "i18next-lint": "dist/cli.js"
   },
   "scripts": {
-    "build": "bun build ./src/cli.ts --outdir=dist --target=node --minify",
+    "build": "bun build ./src/cli.ts ./src/worker.ts --outdir=dist --target=node --minify",
     "test": "bun test"
   },
   "dependencies": {
