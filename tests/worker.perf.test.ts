@@ -11,9 +11,9 @@ const fixturesPerf = join(import.meta.dir, "fixtures", "project-perf");
 /** Glob-entry fixture: many entry points via src/**\/*.tsx, nested feature modules. */
 const fixturesPerfGlob = join(import.meta.dir, "fixtures", "project-perf-glob");
 
-const WARMUP_RUNS = 1;
-const BENCH_RUNS = 5;
-const WORKER_BENCH_RUNS = 3;
+const WARMUP_RUNS = 2;
+const BENCH_RUNS = 15;
+const WORKER_BENCH_RUNS = 10;
 
 /** Resolve worker script path (src/worker.ts when running from source). */
 function getWorkerPath(): string {
