@@ -1,0 +1,9 @@
+{
+  "entry": ["src/index.tsx", "src/routes.tsx"],
+  "translations": [
+    { "file": "src/locales/ru.json", "plurals": "simple" },
+    { "file": "src/locales/ru-numeric.json", "plurals": "numeric" }
+  ],
+  "contextSeparator": "_",
+  "pluralSeparator": "_"
+}
