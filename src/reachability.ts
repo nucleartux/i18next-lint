@@ -101,7 +101,120 @@ function getUsedImportBindingsInFile(
     }
   }
 
+  collectDynamicImportBindings(sf, filePath, rootDir, usedNames, result);
   return result;
+}
+
+/**
+ * Detect dynamic import patterns and add used exports when the assigned variable is used.
+ * - Any call(fn) where fn contains import("./Page"): variable used → all exports of Page ("*").
+ * - Any callback that returns .then(c => c.Bar) or (await import("./Page")).Bar: variable used → only Bar.
+ */
+function collectDynamicImportBindings(
+  sf: ts.SourceFile,
+  filePath: string,
+  rootDir: string,
+  usedNames: Set<string>,
+  result: Map<string, Set<string>>,
+): void {
+  function resolveSpec(spec: string): string | null {
+    const resolved = resolveModule(filePath, spec, { rootDir, extensions: DEFAULT_EXTENSIONS });
+    return resolved && !resolved.includes("node_modules") ? resolved : null;
+  }
+
+  function visit(node: ts.Node): void {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      const varName = node.name.text;
+      if (!usedNames.has(varName)) {
+        ts.forEachChild(node, visit);
+        return;
+      }
+      const init = node.initializer;
+      if (ts.isCallExpression(init) && init.arguments.length >= 1) {
+        const arg0 = init.arguments[0];
+        const namedExport = getNamedExportFromDynamicImportCallback(arg0);
+        if (namedExport) {
+          const { specifier, exportName } = namedExport;
+          const resolved = resolveSpec(specifier);
+          if (resolved) {
+            const set = result.get(resolved) ?? new Set<string>();
+            set.add(exportName);
+            result.set(resolved, set);
+          }
+        } else {
+          const spec = getImportSpecifierFromCallback(arg0);
+          if (spec) {
+            const resolved = resolveSpec(spec);
+            if (resolved) {
+              const set = result.get(resolved) ?? new Set<string>();
+              set.add("*");
+              result.set(resolved, set);
+            }
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  ts.forEachChild(sf, visit);
+}
+
+function getImportSpecifierFromCallback(callback: ts.Node): string | null {
+  let spec: string | null = null;
+  function walk(n: ts.Node): void {
+    if (spec) return;
+    if (
+      ts.isCallExpression(n) &&
+      n.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      n.arguments.length >= 1 &&
+      ts.isStringLiteral(n.arguments[0])
+    ) {
+      spec = (n.arguments[0] as ts.StringLiteral).text;
+      return;
+    }
+    n.forEachChild(walk);
+  }
+  walk(callback);
+  return spec;
+}
+
+function getNamedExportFromDynamicImportCallback(callback: ts.Node): { specifier: string; exportName: string } | null {
+  const specifier = getImportSpecifierFromCallback(callback);
+  if (!specifier) return null;
+
+  let exportName: string | null = null;
+  function walk(n: ts.Node): void {
+    if (exportName) return;
+    if (ts.isAwaitExpression(n)) {
+      const inner = n.expression;
+      if (ts.isCallExpression(inner) && inner.expression.kind === ts.SyntaxKind.ImportKeyword) {
+        let p: ts.Node | undefined = n.parent;
+        if (ts.isParenthesizedExpression(p)) p = p.parent;
+        if (p && ts.isPropertyAccessExpression(p) && ts.isIdentifier(p.name)) {
+          exportName = p.name.text;
+        }
+      }
+    }
+    if (ts.isPropertyAccessExpression(n) && ts.isIdentifier(n.name)) {
+      const base = n.expression;
+      if (ts.isIdentifier(base)) {
+        const par = n.parent;
+        if (
+          par &&
+          (ts.isReturnStatement(par) ||
+            ts.isArrowFunction(par) ||
+            (ts.isPropertyAssignment(par) && par.initializer === n))
+        ) {
+          exportName = n.name.text;
+        }
+      }
+    }
+    n.forEachChild(walk);
+  }
+  walk(callback);
+  if (exportName) return { specifier, exportName };
+  return null;
 }
 
 /**
@@ -133,7 +246,164 @@ export function computeUsedExports(
     }
   }
 
+  traverseUsedExportValues(files, usedExports, rootDir);
   return usedExports;
+}
+
+/**
+ * For a file and export name, return the initializer node of that export (array/object literal or variable ref).
+ */
+function getExportInitializer(
+  filePath: string,
+  exportName: string,
+  rootDir: string,
+): { node: ts.Node; sf: ts.SourceFile } | null {
+  const sf = parseModule(filePath);
+  for (const stmt of sf.statements) {
+    if (ts.isVariableStatement(stmt)) {
+      const isExported = stmt.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+      if (!isExported) continue;
+      for (const decl of stmt.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name) && decl.name.text === exportName && decl.initializer) {
+          return { node: decl.initializer, sf };
+        }
+      }
+    }
+    if (ts.isExportDeclaration(stmt) && stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+      for (const el of stmt.exportClause.elements) {
+        const name = el.propertyName ? el.propertyName.text : el.name.text;
+        if (name !== exportName) continue;
+        const localName = el.name.text;
+        for (const s of sf.statements) {
+          if (ts.isVariableStatement(s)) {
+            for (const d of s.declarationList.declarations) {
+              if (ts.isIdentifier(d.name) && d.name.text === localName && d.initializer) {
+                return { node: d.initializer, sf };
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolve identifier to (resolvedFilePath, exportName) if it's an imported binding.
+ */
+function resolveLocalToImport(
+  filePath: string,
+  localName: string,
+  rootDir: string,
+): { resolvedPath: string; exportName: string } | null {
+  const sf = parseModule(filePath);
+  for (const stmt of sf.statements) {
+    if (!ts.isImportDeclaration(stmt) || !stmt.importClause || !stmt.moduleSpecifier) continue;
+    if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+    const specifier = stmt.moduleSpecifier.text;
+    const resolved = resolveModule(filePath, specifier, { rootDir, extensions: DEFAULT_EXTENSIONS });
+    if (!resolved) continue;
+    if (stmt.importClause.name && stmt.importClause.name.text === localName) {
+      return { resolvedPath: resolved, exportName: "default" };
+    }
+    if (stmt.importClause.namedBindings && ts.isNamedImports(stmt.importClause.namedBindings)) {
+      for (const el of stmt.importClause.namedBindings.elements) {
+        if (el.name.text === localName) {
+          const exportName = el.propertyName ? el.propertyName.text : el.name.text;
+          return { resolvedPath: resolved, exportName };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Traverse an array/object value and collect any property whose value is a callback containing import(),
+ * and any property whose value is an identifier resolving to another module's export (then traverse that).
+ */
+function traverseValueAndCollectLazy(
+  node: ts.Node,
+  filePath: string,
+  rootDir: string,
+  result: Map<string, Set<string>>,
+  visited: Set<string>,
+): void {
+  const key = `${filePath}:${node.getStart()}`;
+  if (visited.has(key)) return;
+  visited.add(key);
+
+  function resolveSpec(spec: string): string | null {
+    const resolved = resolveModule(filePath, spec, { rootDir, extensions: DEFAULT_EXTENSIONS });
+    return resolved && !resolved.includes("node_modules") ? resolved : null;
+  }
+
+  if (ts.isArrayLiteralExpression(node)) {
+    for (const elem of node.elements) {
+      if (elem) traverseValueAndCollectLazy(elem, filePath, rootDir, result, visited);
+    }
+    return;
+  }
+
+  if (ts.isObjectLiteralExpression(node)) {
+    for (const prop of node.properties) {
+      if (!ts.isPropertyAssignment(prop)) continue;
+      const value = prop.initializer;
+      if (!value) continue;
+
+      const spec = getImportSpecifierFromCallback(value);
+      if (spec) {
+        const resolved = resolveSpec(spec);
+        if (resolved) {
+          const set = result.get(resolved) ?? new Set<string>();
+          set.add("*");
+          result.set(resolved, set);
+        }
+        continue;
+      }
+
+      if (ts.isIdentifier(value)) {
+        const resolved = resolveLocalToImport(filePath, value.text, rootDir);
+        if (resolved) {
+          const init = getExportInitializer(resolved.resolvedPath, resolved.exportName, rootDir);
+          if (init) {
+            traverseValueAndCollectLazy(init.node, resolved.resolvedPath, rootDir, result, visited);
+          }
+        }
+        continue;
+      }
+
+      if (ts.isObjectLiteralExpression(value) || ts.isArrayLiteralExpression(value)) {
+        traverseValueAndCollectLazy(value, filePath, rootDir, result, visited);
+      }
+    }
+  }
+}
+
+/**
+ * When an export is used as a value, traverse its initializer to find callbacks containing import()
+ * and identifiers that resolve to other exports (nested structures).
+ */
+function traverseUsedExportValues(
+  files: string[],
+  usedExports: Map<string, Set<string>>,
+  rootDir: string,
+): void {
+  const visited = new Set<string>();
+  for (const filePath of files) {
+    const exportNames = usedExports.get(filePath);
+    if (!exportNames) continue;
+    for (const exportName of exportNames) {
+      if (exportName === "*" || exportName === "default") continue;
+      const init = getExportInitializer(filePath, exportName, rootDir);
+      if (!init) continue;
+      const { node } = init;
+      if (ts.isArrayLiteralExpression(node) || ts.isObjectLiteralExpression(node)) {
+        traverseValueAndCollectLazy(node, filePath, rootDir, usedExports, visited);
+      }
+    }
+  }
 }
 
 /**
