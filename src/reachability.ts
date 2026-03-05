@@ -290,6 +290,28 @@ function getExportInitializer(
 }
 
 /**
+ * For a local (same-file) variable name, return its initializer node if it's an array or object literal.
+ */
+function getLocalVariableInitializer(
+  filePath: string,
+  localName: string,
+): { node: ts.Node; sf: ts.SourceFile } | null {
+  const sf = parseModule(filePath);
+  for (const stmt of sf.statements) {
+    if (!ts.isVariableStatement(stmt)) continue;
+    for (const decl of stmt.declarationList.declarations) {
+      if (!ts.isIdentifier(decl.name) || decl.name.text !== localName || !decl.initializer) continue;
+      const init = decl.initializer;
+      if (ts.isArrayLiteralExpression(init) || ts.isObjectLiteralExpression(init)) {
+        return { node: init, sf };
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Resolve identifier to (resolvedFilePath, exportName) if it's an imported binding.
  */
 function resolveLocalToImport(
@@ -369,6 +391,11 @@ function traverseValueAndCollectLazy(
           const init = getExportInitializer(resolved.resolvedPath, resolved.exportName, rootDir);
           if (init) {
             traverseValueAndCollectLazy(init.node, resolved.resolvedPath, rootDir, result, visited);
+          }
+        } else {
+          const localInit = getLocalVariableInitializer(filePath, value.text);
+          if (localInit) {
+            traverseValueAndCollectLazy(localInit.node, filePath, rootDir, result, visited);
           }
         }
         continue;
