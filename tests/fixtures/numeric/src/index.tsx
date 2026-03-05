@@ -1,7 +1,6 @@
 import React, { lazy } from "react";
 import { useTranslation } from "react-i18next";
-import "./OtherPage";
-
+import { OtherPage } from "./OtherPage";
 
 const LazyPage = React.lazy(async () => ({
   default: (await import("./LazyPage")).LazyPage,
@@ -18,6 +17,7 @@ export const App = () => {
 
   return (
     <div>
+      <OtherPage />
       {simple}
       {withPluralStatic}
       {withPluralDynamic}

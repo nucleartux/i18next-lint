@@ -5,8 +5,8 @@ import { analyzeProject } from "../src/analyzeProject";
 
 const fixturesRoot = join(import.meta.dir, "fixtures", "numeric");
 
-describe("numeric sink integration", () => {
-  it("handles mixed simple, plural, context, Trans, and multiple files", () => {
+describe("numeric plural locale integration", () => {
+  it("handles numeric plural keys (key_0, key_1, key_2) and reports missing/extra correctly", () => {
     const configPath = join(fixturesRoot, "i18next-lint.config.json");
     const [resolved] = loadConfig(configPath);
     const { result } = analyzeProject(resolved);

@@ -76,6 +76,24 @@ function resolveRelativeImport(fromFile: string, specifier: string, extensions: 
   return resolveWithExtensions(raw, extensions);
 }
 
+/**
+ * Resolve a module specifier from a given file. Used by reachability to match imports to resolved paths.
+ */
+export function resolveModule(
+  fromFile: string,
+  specifier: string,
+  options: { rootDir: string; extensions?: string[] },
+): string | null {
+  const extensions = options.extensions ?? DEFAULT_EXTENSIONS;
+  let resolved = resolveRelativeImport(fromFile, specifier, extensions);
+  if (!resolved && !specifier.startsWith(".")) {
+    const packageResolver = createPackageImportResolver(options.rootDir, extensions, resolveWithExtensions);
+    resolved = packageResolver(fromFile, specifier);
+  }
+  if (resolved && resolved.includes("node_modules")) return null;
+  return resolved ?? null;
+}
+
 export interface ImportEdge {
   specifier: string;
   line: number;

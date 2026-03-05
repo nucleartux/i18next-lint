@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { join } from "node:path";
-import { parseTranslationKey, loadTranslationFiles } from "../src/translationLoader";
+import { writeFileSync, unlinkSync } from "node:fs";
+import { parseTranslationKey, loadTranslationFiles, loadTranslationFile } from "../src/translationLoader";
 
 const fixturesDir = join(import.meta.dir, "fixtures");
 
@@ -27,6 +28,12 @@ describe("parseTranslationKey", () => {
     const meta = parseTranslationKey("gender_male", "/fake/ru.json", "_", "simple");
     expect(meta.base).toBe("gender");
     expect(meta.isPlural).toBe(false);
+  });
+
+  it("parses numeric plural with multi-part base (e.g. ratings_count_0)", () => {
+    const meta = parseTranslationKey("ratings_count_0", "/fake/ru.json", "_", "numeric");
+    expect(meta.base).toBe("ratings_count");
+    expect(meta.isPlural).toBe(true);
   });
 });
 
@@ -62,6 +69,32 @@ describe("loadTranslationFiles", () => {
       expect(paths).toBeTruthy();
       expect(paths?.size).toBe(1);
       expect(paths?.has(file)).toBe(true);
+    }
+  });
+
+  it("skips non-string values in translation JSON", () => {
+    const tmpFile = join(fixturesDir, "tmp-non-strings.json");
+    writeFileSync(
+      tmpFile,
+      JSON.stringify({
+        valid_key: "Hello",
+        number_val: 42,
+        nested: { a: 1 },
+        array_val: ["x"],
+      }),
+    );
+    try {
+      const { meta, baseMap } = loadTranslationFile(tmpFile, "_", "simple");
+      expect(meta).toHaveLength(1);
+      expect(meta[0].fullKey).toBe("valid_key");
+      expect(meta[0].base).toBe("valid");
+      expect(baseMap.get("valid")?.allKeys.has("valid_key")).toBe(true);
+    } finally {
+      try {
+        unlinkSync(tmpFile);
+      } catch {
+        /* ignore */
+      }
     }
   });
 });

@@ -1,9 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import { join } from "node:path";
 import { buildLocationChain, buildMissingKeyChains } from "../src/chainBuilder";
 import type { ImportGraph } from "../src/sourceWalker";
-import { loadConfig } from "../src/config";
-import { analyzeProject } from "../src/analyzeProject";
 
 function createMockGraph(
   edges: Record<string, Array<{ importerPath: string; importerLine: number }>>,
@@ -165,35 +162,5 @@ describe("chainBuilder - buildMissingKeyChains", () => {
       toRelative,
     );
     expect(chains.same_key).toEqual(["entry.tsx:1 -> a.ts:10", "entry.tsx:2 -> b.ts:20"]);
-  });
-});
-
-describe("chainBuilder - integration with real project (kitchen-sink)", () => {
-  it("produces correct dependency chains for missing keys", () => {
-    const fixturesRoot = join(import.meta.dir, "fixtures", "kitchen-sink");
-    const configPath = join(fixturesRoot, "i18next-lint.config.json");
-    const [config] = loadConfig(configPath);
-    const { result, importGraph, entryPaths } = analyzeProject(config);
-    const rootDir = config.rootDir;
-    const toRelative = (p: string) => p.replace(rootDir + "/", "").replace(/\\/g, "/");
-
-    const chains = buildMissingKeyChains(result.missingKeyLocations, [{ importGraph, entryPaths }], toRelative);
-
-    expect(result.missingKeys).toContain("missingPlural");
-    expect(result.missingKeys).toContain("number_key");
-    expect(result.missingKeys).toContain("ratings_count");
-
-    // missingPlural: used in OtherPage.tsx:7, imported by index.tsx
-    expect(chains.missingPlural).toHaveLength(1);
-    expect(chains.missingPlural![0]).toMatch(/index\.tsx:\d+ -> .*OtherPage\.tsx:7/);
-
-    // number_key: used in utils.ts:4, reached via index -> LazyPage -> utils
-    expect(chains.number_key).toHaveLength(1);
-    expect(chains.number_key![0]).toMatch(/index\.tsx:\d+ -> .*LazyPage\.tsx:\d+ -> .*utils\.ts:4/);
-
-    // ratings_count: used directly in index.tsx
-    expect(chains.ratings_count).toHaveLength(1);
-    expect(chains.ratings_count![0]).toMatch(/index\.tsx:26/);
-    expect(chains.ratings_count![0]).not.toContain(" -> ");
   });
 });

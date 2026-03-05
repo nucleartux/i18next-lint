@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { join } from "node:path";
 
 const projectSimpleExtraRoot = join(import.meta.dir, "fixtures", "project-simple-extra");
-const kitchenSinkRoot = join(import.meta.dir, "fixtures", "kitchen-sink");
+const projectWithIssuesRoot = join(import.meta.dir, "fixtures", "project-with-issues");
 const projectCleanRoot = join(import.meta.dir, "fixtures", "project-clean");
 const multiProjectRoot = join(import.meta.dir, "fixtures", "multi-project");
 
@@ -36,8 +36,8 @@ describe("CLI exit codes", () => {
     expect(exitCode).toBe(1);
   });
 
-  it("exits with code 1 when there are missing or extra keys in kitchen sink project", async () => {
-    const { exitCode } = await runCli(kitchenSinkRoot);
+  it("exits with code 1 when there are missing or extra keys", async () => {
+    const { exitCode } = await runCli(projectWithIssuesRoot);
     expect(exitCode).toBe(1);
   });
 
@@ -61,14 +61,14 @@ describe("CLI output", () => {
     expect(stdout).toContain("unused_key");
   });
 
-  it("prints report with missing and/or extra keys for kitchen sink project", async () => {
-    const { stdout } = await runCli(kitchenSinkRoot);
+  it("prints report with missing and/or extra keys", async () => {
+    const { stdout } = await runCli(projectWithIssuesRoot);
     expect(stdout).toContain("i18next-lint report:");
     expect(stdout).toMatch(/Missing keys:|Extra keys:/);
   });
 
   it("prints dependency chain for missing keys (entry -> ... -> usage)", async () => {
-    const { stdout } = await runCli(kitchenSinkRoot);
+    const { stdout } = await runCli(projectWithIssuesRoot);
     expect(stdout).toContain("Missing keys:");
     expect(stdout).toMatch(/->/);
   });
