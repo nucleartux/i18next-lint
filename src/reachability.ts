@@ -7,6 +7,8 @@ import type { Usage } from "./types";
 
 const DEFAULT_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"];
 
+export type SourceFileCache = Map<string, ts.SourceFile>;
+
 function getScriptKind(filePath: string): ts.ScriptKind {
   const ext = extname(filePath);
   switch (ext) {
@@ -28,6 +30,15 @@ function parseModule(filePath: string): ts.SourceFile {
   return ts.createSourceFile(filePath, code, ts.ScriptTarget.Latest, true, getScriptKind(filePath));
 }
 
+function getOrParse(filePath: string, cache: SourceFileCache): ts.SourceFile {
+  let sf = cache.get(filePath);
+  if (!sf) {
+    sf = parseModule(filePath);
+    cache.set(filePath, sf);
+  }
+  return sf;
+}
+
 export interface DeclarationInfo {
   name?: string;
   lineStart: number;
@@ -41,8 +52,9 @@ export interface DeclarationInfo {
 function getUsedImportBindingsInFile(
   filePath: string,
   rootDir: string,
+  cache: SourceFileCache,
 ): Map<string, Set<string>> {
-  const sf = parseModule(filePath);
+  const sf = getOrParse(filePath, cache);
   const result = new Map<string, Set<string>>();
   const usedNames = new Set<string>();
 
@@ -101,7 +113,7 @@ function getUsedImportBindingsInFile(
     }
   }
 
-  collectDynamicImportBindings(sf, filePath, rootDir, usedNames, result);
+  collectDynamicImportBindings(sf, filePath, rootDir, usedNames, result, cache);
   return result;
 }
 
@@ -116,6 +128,7 @@ function collectDynamicImportBindings(
   rootDir: string,
   usedNames: Set<string>,
   result: Map<string, Set<string>>,
+  cache: SourceFileCache,
 ): void {
   function resolveSpec(spec: string): string | null {
     const resolved = resolveModule(filePath, spec, { rootDir, extensions: DEFAULT_EXTENSIONS });
@@ -224,6 +237,7 @@ export function computeUsedExports(
   files: string[],
   importGraph: ImportGraph,
   rootDir: string,
+  cache: SourceFileCache,
 ): Map<string, Set<string>> {
   const usedExports = new Map<string, Set<string>>();
   for (const filePath of files) {
@@ -231,7 +245,7 @@ export function computeUsedExports(
   }
 
   for (const importerPath of files) {
-    const usedBindings = getUsedImportBindingsInFile(importerPath, rootDir);
+    const usedBindings = getUsedImportBindingsInFile(importerPath, rootDir, cache);
     for (const [resolvedPath, exportNames] of usedBindings) {
       if (!usedExports.has(resolvedPath)) continue;
       const set = usedExports.get(resolvedPath)!;
@@ -246,7 +260,7 @@ export function computeUsedExports(
     }
   }
 
-  traverseUsedExportValues(files, usedExports, rootDir);
+  traverseUsedExportValues(files, usedExports, rootDir, cache);
   return usedExports;
 }
 
@@ -257,8 +271,9 @@ function getExportInitializer(
   filePath: string,
   exportName: string,
   rootDir: string,
+  cache: SourceFileCache,
 ): { node: ts.Node; sf: ts.SourceFile } | null {
-  const sf = parseModule(filePath);
+  const sf = getOrParse(filePath, cache);
   for (const stmt of sf.statements) {
     if (ts.isVariableStatement(stmt)) {
       const isExported = stmt.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
@@ -295,8 +310,9 @@ function getExportInitializer(
 function getLocalVariableInitializer(
   filePath: string,
   localName: string,
+  cache: SourceFileCache,
 ): { node: ts.Node; sf: ts.SourceFile } | null {
-  const sf = parseModule(filePath);
+  const sf = getOrParse(filePath, cache);
   for (const stmt of sf.statements) {
     if (!ts.isVariableStatement(stmt)) continue;
     for (const decl of stmt.declarationList.declarations) {
@@ -318,8 +334,9 @@ function resolveLocalToImport(
   filePath: string,
   localName: string,
   rootDir: string,
+  cache: SourceFileCache,
 ): { resolvedPath: string; exportName: string } | null {
-  const sf = parseModule(filePath);
+  const sf = getOrParse(filePath, cache);
   for (const stmt of sf.statements) {
     if (!ts.isImportDeclaration(stmt) || !stmt.importClause || !stmt.moduleSpecifier) continue;
     if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue;
@@ -351,6 +368,7 @@ function traverseValueAndCollectLazy(
   rootDir: string,
   result: Map<string, Set<string>>,
   visited: Set<string>,
+  cache: SourceFileCache,
 ): void {
   const key = `${filePath}:${node.getStart()}`;
   if (visited.has(key)) return;
@@ -363,7 +381,7 @@ function traverseValueAndCollectLazy(
 
   if (ts.isArrayLiteralExpression(node)) {
     for (const elem of node.elements) {
-      if (elem) traverseValueAndCollectLazy(elem, filePath, rootDir, result, visited);
+      if (elem) traverseValueAndCollectLazy(elem, filePath, rootDir, result, visited, cache);
     }
     return;
   }
@@ -386,23 +404,23 @@ function traverseValueAndCollectLazy(
       }
 
       if (ts.isIdentifier(value)) {
-        const resolved = resolveLocalToImport(filePath, value.text, rootDir);
+        const resolved = resolveLocalToImport(filePath, value.text, rootDir, cache);
         if (resolved) {
-          const init = getExportInitializer(resolved.resolvedPath, resolved.exportName, rootDir);
+          const init = getExportInitializer(resolved.resolvedPath, resolved.exportName, rootDir, cache);
           if (init) {
-            traverseValueAndCollectLazy(init.node, resolved.resolvedPath, rootDir, result, visited);
+            traverseValueAndCollectLazy(init.node, resolved.resolvedPath, rootDir, result, visited, cache);
           }
         } else {
-          const localInit = getLocalVariableInitializer(filePath, value.text);
+          const localInit = getLocalVariableInitializer(filePath, value.text, cache);
           if (localInit) {
-            traverseValueAndCollectLazy(localInit.node, filePath, rootDir, result, visited);
+            traverseValueAndCollectLazy(localInit.node, filePath, rootDir, result, visited, cache);
           }
         }
         continue;
       }
 
       if (ts.isObjectLiteralExpression(value) || ts.isArrayLiteralExpression(value)) {
-        traverseValueAndCollectLazy(value, filePath, rootDir, result, visited);
+        traverseValueAndCollectLazy(value, filePath, rootDir, result, visited, cache);
       }
     }
   }
@@ -416,6 +434,7 @@ function traverseUsedExportValues(
   files: string[],
   usedExports: Map<string, Set<string>>,
   rootDir: string,
+  cache: SourceFileCache,
 ): void {
   const visited = new Set<string>();
   for (const filePath of files) {
@@ -423,11 +442,11 @@ function traverseUsedExportValues(
     if (!exportNames) continue;
     for (const exportName of exportNames) {
       if (exportName === "*" || exportName === "default") continue;
-      const init = getExportInitializer(filePath, exportName, rootDir);
+      const init = getExportInitializer(filePath, exportName, rootDir, cache);
       if (!init) continue;
       const { node } = init;
       if (ts.isArrayLiteralExpression(node) || ts.isObjectLiteralExpression(node)) {
-        traverseValueAndCollectLazy(node, filePath, rootDir, usedExports, visited);
+        traverseValueAndCollectLazy(node, filePath, rootDir, usedExports, visited, cache);
       }
     }
   }
@@ -436,8 +455,8 @@ function traverseUsedExportValues(
 /**
  * List top-level declarations in a file with their line ranges and export names.
  */
-export function getDeclarationsInFile(filePath: string): DeclarationInfo[] {
-  const sf = parseModule(filePath);
+export function getDeclarationsInFile(filePath: string, cache: SourceFileCache): DeclarationInfo[] {
+  const sf = getOrParse(filePath, cache);
   const declarations: DeclarationInfo[] = [];
 
   function getLineRange(node: ts.Node): { lineStart: number; lineEnd: number } {
@@ -505,8 +524,9 @@ function getReferencedLocalNames(
   filePath: string,
   decl: DeclarationInfo,
   allDeclNames: Set<string>,
+  cache: SourceFileCache,
 ): Set<string> {
-  const sf = parseModule(filePath);
+  const sf = getOrParse(filePath, cache);
   const refs = new Set<string>();
 
   function visit(node: ts.Node) {
@@ -547,11 +567,12 @@ export function computeUsedDeclarations(
   files: string[],
   entryPaths: Set<string>,
   usedExports: Map<string, Set<string>>,
+  cache: SourceFileCache,
 ): Map<string, Set<{ lineStart: number; lineEnd: number }>> {
   const result = new Map<string, Set<{ lineStart: number; lineEnd: number }>>();
 
   for (const filePath of files) {
-    const declarations = getDeclarationsInFile(filePath);
+    const declarations = getDeclarationsInFile(filePath, cache);
     const usedRanges = new Set<{ lineStart: number; lineEnd: number }>();
     const allDeclNames = new Set(declarations.map((d) => d.name).filter(Boolean) as string[]);
 
@@ -594,7 +615,7 @@ export function computeUsedDeclarations(
       for (const d of declarations) {
         if (!d.name) continue;
         if (usedNames.has(d.name)) {
-          const refs = getReferencedLocalNames(filePath, d, allDeclNames);
+          const refs = getReferencedLocalNames(filePath, d, allDeclNames, cache);
           for (const ref of refs) {
             if (!usedNames.has(ref)) {
               const refDecl = nameToDecl.get(ref);
@@ -607,7 +628,7 @@ export function computeUsedDeclarations(
           }
           continue;
         }
-        const refs = getReferencedLocalNames(filePath, d, allDeclNames);
+        const refs = getReferencedLocalNames(filePath, d, allDeclNames, cache);
         for (const ref of refs) {
           if (usedNames.has(ref)) {
             usedNames.add(d.name);
@@ -660,8 +681,12 @@ export function filterReachableUsages(
 ): Usage[] {
   const entrySet = new Set(entryPaths);
   const filesSet = new Set(files);
-  const usedExports = computeUsedExports(files, importGraph, rootDir);
-  const usedDeclarations = computeUsedDeclarations(files, entrySet, usedExports);
+  const cache: SourceFileCache = new Map();
+  for (const file of files) {
+    cache.set(file, parseModule(file));
+  }
+  const usedExports = computeUsedExports(files, importGraph, rootDir, cache);
+  const usedDeclarations = computeUsedDeclarations(files, entrySet, usedExports, cache);
   return usages.filter((u) =>
     isUsageReachable(u, usedDeclarations, entrySet, filesSet),
   );
