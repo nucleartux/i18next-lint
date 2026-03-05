@@ -7,6 +7,5 @@
     }
   ],
   "contextSeparator": "_",
-  "pluralSeparator": "_",
-  "deadCodeDetection": true
+  "pluralSeparator": "_"
 }

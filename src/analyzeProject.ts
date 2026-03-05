@@ -59,10 +59,7 @@ export function analyzeProject(config: ResolvedConfig): AnalyzeProjectResult {
     usages.push(...extractUsagesFromFile(file, { contextSeparator: config.contextSeparator }));
   }
 
-  const usagesToAnalyze =
-    config.deadCodeDetection
-      ? filterReachableUsages(usages, files, entryPaths, importGraph, config.rootDir)
-      : usages;
+  const usagesToAnalyze = filterReachableUsages(usages, files, entryPaths, importGraph, config.rootDir);
 
   const translations = loadTranslationFiles(config.translations, config.contextSeparator);
 

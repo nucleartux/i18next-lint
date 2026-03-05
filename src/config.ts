@@ -12,7 +12,6 @@ export interface ResolvedConfig {
   contextSeparator: string;
   pluralSeparator: string;
   rootDir: string;
-  deadCodeDetection: boolean;
 }
 
 function isGlobPattern(str: string): boolean {
@@ -63,7 +62,6 @@ function resolveOneProject(rootDir: string, parsed: LintConfig): ResolvedConfig 
 
   const contextSeparator = parsed.contextSeparator ?? "_";
   const pluralSeparator = parsed.pluralSeparator ?? "_";
-  const deadCodeDetection = parsed.deadCodeDetection === true;
 
   const entry = resolveEntry(rootDir, parsed.entry);
   const normalizedTranslations = parsed.translations.map(normalizeTranslationEntry);
@@ -77,7 +75,6 @@ function resolveOneProject(rootDir: string, parsed: LintConfig): ResolvedConfig 
     contextSeparator,
     pluralSeparator,
     rootDir,
-    deadCodeDetection,
   };
 }
 

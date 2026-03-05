@@ -12,20 +12,12 @@ const fixturesDynamicUnused = join(import.meta.dir, "fixtures", "project-dead-co
 const fixturesHoc = join(import.meta.dir, "fixtures", "project-dead-code-hoc");
 
 describe("dead code detection", () => {
-  it("reports key2 and comp2 as extra when deadCodeDetection is true", () => {
+  it("reports key2 and comp2 as extra (dead code)", () => {
     const configPath = join(fixturesDeadCode, "i18next-lint.config.json");
     const [resolved] = loadConfig(configPath);
     const { result } = analyzeProject(resolved);
     // fun2 is never called; Comp2 is imported but never used in JSX
     expect(result.extraKeys.sort()).toEqual(["comp2", "key2"]);
-    expect(result.missingKeys).toEqual([]);
-  });
-
-  it("with deadCodeDetection false, all keys in discovered files are used (no extra)", () => {
-    const configPath = join(fixturesDeadCode, "i18next-lint.config.no-dead-code.json");
-    const [resolved] = loadConfig(configPath);
-    const { result } = analyzeProject(resolved);
-    expect(result.extraKeys).toEqual([]);
     expect(result.missingKeys).toEqual([]);
   });
 

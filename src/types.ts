@@ -53,11 +53,6 @@ export interface LintConfig {
    */
   pluralSeparator?: string;
 
-  /**
-   * When true, only report extra/missing keys for code that is reachable from entry points.
-   * Default: false (all usages in discovered files count as used).
-   */
-  deadCodeDetection?: boolean;
 }
 
 /**
