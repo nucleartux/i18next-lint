@@ -4,7 +4,7 @@ import { unlinkSync } from "node:fs";
 import { loadConfig } from "../src/config";
 
 const fixturesSimpleExtra = join(import.meta.dir, "fixtures", "project-simple-extra");
-const fixturesKitchenSink = join(import.meta.dir, "fixtures", "kitchen-sink");
+const fixturesMultiEntry = join(import.meta.dir, "fixtures", "project-multi-entry");
 
 describe("loadConfig - entry normalization", () => {
   it("resolves string entry to array with one absolute path", () => {
@@ -19,26 +19,26 @@ describe("loadConfig - entry normalization", () => {
   });
 
   it("resolves array of paths to array of absolute paths", () => {
-    const configPath = join(fixturesKitchenSink, "i18next-lint.config.entry-array.json");
+    const configPath = join(fixturesMultiEntry, "i18next-lint.config.entry-array.json");
     const configs = loadConfig(configPath);
     expect(configs).toHaveLength(1);
     const resolved = configs[0];
 
     expect(resolved.entry).toHaveLength(2);
-    expect(resolved.entry).toContain(resolve(fixturesKitchenSink, "src/index.tsx"));
-    expect(resolved.entry).toContain(resolve(fixturesKitchenSink, "src/OtherPage.tsx"));
+    expect(resolved.entry).toContain(resolve(fixturesMultiEntry, "src/index.tsx"));
+    expect(resolved.entry).toContain(resolve(fixturesMultiEntry, "src/OtherPage.tsx"));
   });
 
   it("expands glob pattern to matching absolute file paths", () => {
-    const configPath = join(fixturesKitchenSink, "i18next-lint.config.entry-glob.json");
+    const configPath = join(fixturesMultiEntry, "i18next-lint.config.entry-glob.json");
     const configs = loadConfig(configPath);
     expect(configs).toHaveLength(1);
     const resolved = configs[0];
 
     expect(resolved.entry.length).toBeGreaterThanOrEqual(1);
-    expect(resolved.entry).toContain(resolve(fixturesKitchenSink, "src/index.tsx"));
-    expect(resolved.entry).toContain(resolve(fixturesKitchenSink, "src/OtherPage.tsx"));
-    expect(resolved.entry).toContain(resolve(fixturesKitchenSink, "src/LazyPage.tsx"));
+    expect(resolved.entry).toContain(resolve(fixturesMultiEntry, "src/index.tsx"));
+    expect(resolved.entry).toContain(resolve(fixturesMultiEntry, "src/OtherPage.tsx"));
+    expect(resolved.entry).toContain(resolve(fixturesMultiEntry, "src/LazyPage.tsx"));
     resolved.entry.forEach((p) => expect(p).toEndWith(".tsx"));
   });
 

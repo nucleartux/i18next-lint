@@ -5,7 +5,7 @@ import { analyzeProject } from "../src/analyzeProject";
 
 const fixturesSimpleExtra = join(import.meta.dir, "fixtures", "project-simple-extra");
 const fixturesMonorepo = join(import.meta.dir, "fixtures", "monorepo-workspaces");
-const fixturesKitchenSink = join(import.meta.dir, "fixtures", "kitchen-sink");
+const fixturesMultiEntry = join(import.meta.dir, "fixtures", "project-multi-entry");
 
 describe("analyzeProject - integration of core pieces", () => {
   it("reports extra keys from translations when there are no usages", () => {
@@ -27,23 +27,23 @@ describe("analyzeProject - integration of core pieces", () => {
   });
 
   it("analyzes from multiple entries (array config) with merged file set", () => {
-    const configPath = join(fixturesKitchenSink, "i18next-lint.config.entry-array.json");
+    const configPath = join(fixturesMultiEntry, "i18next-lint.config.entry-array.json");
     const [resolved] = loadConfig(configPath);
     const { result } = analyzeProject(resolved);
 
     expect(resolved.entry).toHaveLength(2);
-    expect(result.missingKeys.sort()).toEqual(["missingPlural", "number_key", "ratings_count"]);
-    expect(result.extraKeys.sort()).toEqual(["gender_female", "unused_key_in_kitchen"].sort());
+    expect(result.missingKeys.sort()).toEqual(["b"]);
+    expect(result.extraKeys.sort()).toEqual(["extra_key"]);
   });
 
   it("analyzes from glob entry pattern", () => {
-    const configPath = join(fixturesKitchenSink, "i18next-lint.config.entry-glob.json");
+    const configPath = join(fixturesMultiEntry, "i18next-lint.config.entry-glob.json");
     const [resolved] = loadConfig(configPath);
     const { result } = analyzeProject(resolved);
 
     expect(resolved.entry.length).toBeGreaterThanOrEqual(1);
-    expect(result.missingKeys.sort()).toEqual(["missingPlural", "number_key", "ratings_count"]);
-    expect(result.extraKeys.sort()).toEqual(["gender_female", "unused_key_in_kitchen"].sort());
+    expect(result.missingKeys.sort()).toEqual(["b", "c"]);
+    expect(result.extraKeys.sort()).toEqual(["extra_key"]);
   });
 });
 
