@@ -1,6 +1,6 @@
 import ts from "typescript";
 import { readFileSync } from "node:fs";
-import { Usage, UsageKind } from "./types";
+import { Usage, UsageKind, type EnclosingDeclaration } from "./types";
 
 export interface UsageExtractionOptions {
   contextSeparator: string;
@@ -282,6 +282,35 @@ export function extractUsagesFromSource(
 
   const usages: Usage[] = [];
   const tParamStack: Set<string>[] = [];
+  const enclosingStack: EnclosingDeclaration[] = [];
+
+  function getEnclosingFromNode(fnNode: ts.Node): EnclosingDeclaration {
+    const sf = fnNode.getSourceFile();
+    let declNode = fnNode;
+    let name: string | undefined;
+    if (ts.isFunctionDeclaration(fnNode) && fnNode.name && ts.isIdentifier(fnNode.name)) {
+      name = fnNode.name.text;
+    } else if (ts.isArrowFunction(fnNode) || ts.isFunctionExpression(fnNode)) {
+      const parent = fnNode.parent;
+      if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+        name = parent.name.text;
+        declNode = parent;
+      } else if (ts.isPropertyAssignment(parent) && ts.isIdentifier(parent.name)) {
+        name = parent.name.text;
+        declNode = parent;
+      }
+    }
+    const start = declNode.getStart();
+    const end = declNode.getEnd();
+    const { line: lineStart } = sf.getLineAndCharacterOfPosition(start);
+    const { line: lineEnd } = sf.getLineAndCharacterOfPosition(end);
+    return {
+      filePath,
+      lineStart: lineStart + 1,
+      lineEnd: lineEnd + 1,
+      name,
+    };
+  }
 
   function addUsage(
     node: ts.Node,
@@ -299,6 +328,18 @@ export function extractUsagesFromSource(
     const kind = classifyUsage(hasPlural, isStaticPlural, hasContext, isStaticContext);
     const sf = node.getSourceFile();
     const { line, character } = sf.getLineAndCharacterOfPosition(node.getStart());
+    let enclosingDeclaration: EnclosingDeclaration | undefined;
+    if (enclosingStack.length > 0) {
+      enclosingDeclaration = { ...enclosingStack[enclosingStack.length - 1] };
+    } else {
+      const lineCount = sf.getLineAndCharacterOfPosition(sf.getEnd()).line + 1;
+      enclosingDeclaration = {
+        filePath,
+        lineStart: 1,
+        lineEnd: lineCount,
+        isModule: true,
+      };
+    }
     usages.push({
       base,
       kind,
@@ -310,6 +351,7 @@ export function extractUsagesFromSource(
         line: line + 1,
         column: character + 1,
       },
+      enclosingDeclaration,
     });
   }
 
@@ -341,6 +383,12 @@ export function extractUsagesFromSource(
   function visit(node: ts.Node) {
     const fnNode =
       ts.isArrowFunction(node) || ts.isFunctionExpression(node) || ts.isFunctionDeclaration(node) ? node : undefined;
+    let pushedEnclosing = false;
+    if (fnNode) {
+      const enclosing = getEnclosingFromNode(fnNode);
+      enclosingStack.push(enclosing);
+      pushedEnclosing = true;
+    }
     const tParams = fnNode ? getTParamsForFunction(fnNode) : undefined;
     if (tParams && tParams.size > 0) {
       tParamStack.push(tParams);
@@ -442,6 +490,9 @@ export function extractUsagesFromSource(
     ts.forEachChild(node, visit);
     if (tParams && tParams.size > 0) {
       tParamStack.pop();
+    }
+    if (pushedEnclosing) {
+      enclosingStack.pop();
     }
   }
 
