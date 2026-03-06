@@ -18,7 +18,7 @@
   },
   "scripts": {
     "build": "bun build ./src/cli.ts ./src/worker.ts --outdir=dist --target=node --minify",
-    "test": "bun test",
+    "test": "bun run scripts/run-tests.ts",
     "test:perf": "bun test tests/worker.perf.test.ts",
     "test:perf:baseline": "UPDATE_PERF_BASELINE=1 bun test tests/worker.perf.test.ts"
   },
