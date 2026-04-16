@@ -1,6 +1,8 @@
 import { basename, extname } from "node:path";
 import { BaseKeyInfo, ProjectAnalysisResult, TranslationKeyMeta, Usage } from "./types";
 
+const CLDR_PLURAL_SUFFIXES = new Set(["zero", "one", "two", "few", "many", "other"]);
+
 export interface AnalyzerInput {
   translations: {
     baseMap: Map<string, BaseKeyInfo>;
@@ -74,46 +76,55 @@ export function analyze(input: AnalyzerInput): ProjectAnalysisResult {
     if (u.hasPlural) {
       let totalPluralForms = 0;
       let numericPluralForms = 0;
+      let suffixPluralForms = 0;
 
       const escapedBase = baseLiteral.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escapedCtxSep = contextSeparator.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escapedPlSep = pluralSeparator.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const numericSuffixPattern = new RegExp(
-        // Matches both:
-        // - "<base><pluralSeparator><digit>"
-        // - "<base><contextSeparator><context><pluralSeparator><digit>"
-        `^${escapedBase}(?:${contextSeparator}[^${pluralSeparator}]+)?${pluralSeparator}(\\d+)$`,
+        `^${escapedBase}(?:${escapedCtxSep}[^${escapedPlSep}]+)?${escapedPlSep}(\\d+)$`,
+      );
+      const cldrSuffixPattern = new RegExp(
+        `^${escapedBase}(?:${escapedCtxSep}[^${escapedPlSep}]+)?${escapedPlSep}(zero|one|two|few|many|other)$`,
       );
 
+      const pluralPrefix = `${baseLiteral}${pluralSeparator}`;
+
       for (const m of meta) {
-        if (!m.isPlural) continue;
         const key = m.fullKey;
+
+        // Detect CLDR suffix-style plurals (zero, one, two, few, many, other)
+        // regardless of isPlural metadata, since the translation file may use
+        // i18next v4 suffixes without an explicit "suffix" plural style config.
+        // Also handles context+plural: "base_context_one".
+        if (key.startsWith(pluralPrefix) && cldrSuffixPattern.test(key)) {
+          suffixPluralForms++;
+          totalPluralForms++;
+          continue;
+        }
+
+        if (!m.isPlural) continue;
 
         if (numericSuffixPattern.test(key)) {
           numericPluralForms++;
           totalPluralForms++;
-        } else if (key.startsWith(`${baseLiteral}${pluralSeparator}`)) {
-          // Simple plural styles such as "item_plural" still count as having
-          // plural forms for this base.
+        } else if (key.startsWith(pluralPrefix)) {
           totalPluralForms++;
         }
       }
 
       const isNumericStyle = numericPluralForms > 0;
+      const isSuffixStyle = suffixPluralForms > 0;
       const hasEnoughPluralForms = isNumericStyle
         ? numericPluralForms >= 2
         : totalPluralForms > 0;
 
-      // Require plural forms: if none (for simple style) or an
-      // insufficient set of numeric variants, report missing plural
-      // forms for the literal key used in source.
       if (!hasEnoughPluralForms) {
         addMissingKey(baseLiteral, { filePath: u.location.filePath, line: u.location.line }, "plural");
       }
 
       // All plural forms corresponding to this literal base are considered
-      // used. This is determined using the literal key from source and the
-      // configured plural separator, so that keys like "ratings_count_0"
-      // are treated as plural variants of "ratings_count".
-      const pluralPrefix = `${baseLiteral}${pluralSeparator}`;
+      // used, including CLDR suffix variants like "item_one", "item_few".
       for (const m of meta) {
         if (m.fullKey.startsWith(pluralPrefix)) {
           usedTranslationKeys.add(m.fullKey);
@@ -123,12 +134,13 @@ export function analyze(input: AnalyzerInput): ProjectAnalysisResult {
       const singularKey = baseLiteral;
       const hasSingular = hasTranslationKey(singularKey);
       const numericOnlyAndComplete = isNumericStyle && !hasSingular && hasEnoughPluralForms;
+      const suffixOnlyAndComplete = isSuffixStyle && !hasSingular && hasEnoughPluralForms;
 
-      // For numeric plural styles where we have a complete set of numeric
+      // For numeric/suffix plural styles where we have a complete set of
       // variants and no singular, do not require a singular key. This
       // matches real-world usage where keys like "every_n_days_0/1/2/3"
-      // exist without a bare "every_n_days".
-      if (!numericOnlyAndComplete) {
+      // or "days_one/few/many" exist without a bare "every_n_days"/"days".
+      if (!numericOnlyAndComplete && !suffixOnlyAndComplete) {
         if (!hasSingular) {
           addMissingKey(baseLiteral, { filePath: u.location.filePath, line: u.location.line }, "singular");
         } else {
@@ -142,11 +154,29 @@ export function analyze(input: AnalyzerInput): ProjectAnalysisResult {
       if (u.kind === "staticContext" && u.contextLiteral) {
         const requiredKey = `${baseLiteral}${contextSeparator}${u.contextLiteral}`;
         if (!hasTranslationKey(requiredKey)) {
-          addMissingKey(
-            requiredKey,
-            { filePath: u.location.filePath, line: u.location.line },
-            u.hasPlural ? "plural" : "singular",
-          );
+          // When plural is also present, the required context key may only
+          // exist as CLDR suffix variants (e.g. "period_day_one" instead of
+          // "period_day"). Check for those before reporting missing.
+          let hasSuffixVariants = false;
+          if (u.hasPlural) {
+            const ctxPluralPrefix = `${requiredKey}${pluralSeparator}`;
+            for (const m of meta) {
+              if (m.fullKey.startsWith(ctxPluralPrefix)) {
+                const suffix = m.fullKey.slice(ctxPluralPrefix.length);
+                if (CLDR_PLURAL_SUFFIXES.has(suffix)) {
+                  hasSuffixVariants = true;
+                  usedTranslationKeys.add(m.fullKey);
+                }
+              }
+            }
+          }
+          if (!hasSuffixVariants) {
+            addMissingKey(
+              requiredKey,
+              { filePath: u.location.filePath, line: u.location.line },
+              u.hasPlural ? "plural" : "singular",
+            );
+          }
         } else {
           usedTranslationKeys.add(requiredKey);
         }

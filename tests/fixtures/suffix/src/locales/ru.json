@@ -1,0 +1,23 @@
+{
+  "simple": "Простой текст",
+  "days_one": "%d день",
+  "days_few": "%d дня",
+  "days_many": "%d дней",
+  "label_points_formatted_one": "%s балл",
+  "label_points_formatted_few": "%s балла",
+  "label_points_formatted_many": "%s баллов",
+  "label_points_formatted_other": "%s баллов",
+  "gender_male": "Он",
+  "gender_female": "Она",
+  "status_active": "Активен",
+  "status_inactive": "Неактивен",
+  "notification_period_day_one": "Раз в день",
+  "notification_period_day_few": "Раз в %d дня",
+  "notification_period_day_many": "Раз в %d дней",
+  "notification_period_week_one": "Раз в неделю",
+  "notification_period_week_few": "Раз в %d недели",
+  "notification_period_week_many": "Раз в %d недель",
+  "alias_key": "Алиас",
+  "missingPlural": "Отсутствуют формы множественного",
+  "unused_suffix_key": "Этот ключ нигде не используется"
+}

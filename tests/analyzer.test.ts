@@ -414,6 +414,206 @@ describe("analyzer - context handling", () => {
   });
 });
 
+describe("analyzer - CLDR suffix plurals (i18next v4)", () => {
+  it("recognizes _one/_few/_many as plural forms without requiring bare singular key", () => {
+    const translations = makeTranslations([
+      { key: "days_one" },
+      { key: "days_few" },
+      { key: "days_many" },
+    ]);
+    const usages: Usage[] = [
+      {
+        base: "days",
+        kind: "staticPlural",
+        hasContext: false,
+        hasPlural: true,
+        location: { filePath: "src/App.tsx", line: 1, column: 1 },
+      },
+    ];
+
+    const result = analyzeCase(translations, usages);
+    expect(result.missingKeys).toEqual([]);
+    expect(result.extraKeys).toEqual([]);
+  });
+
+  it("recognizes all six CLDR suffixes: zero, one, two, few, many, other", () => {
+    const translations = makeTranslations([
+      { key: "item_zero" },
+      { key: "item_one" },
+      { key: "item_two" },
+      { key: "item_few" },
+      { key: "item_many" },
+      { key: "item_other" },
+    ]);
+    const usages: Usage[] = [
+      {
+        base: "item",
+        kind: "staticPlural",
+        hasContext: false,
+        hasPlural: true,
+        location: { filePath: "src/App.tsx", line: 1, column: 1 },
+      },
+    ];
+
+    const result = analyzeCase(translations, usages);
+    expect(result.missingKeys).toEqual([]);
+    expect(result.extraKeys).toEqual([]);
+  });
+
+  it("works when bare singular coexists with suffix plurals", () => {
+    const translations = makeTranslations([
+      { key: "item" },
+      { key: "item_one" },
+      { key: "item_few" },
+      { key: "item_many" },
+    ]);
+    const usages: Usage[] = [
+      {
+        base: "item",
+        kind: "staticPlural",
+        hasContext: false,
+        hasPlural: true,
+        location: { filePath: "src/App.tsx", line: 1, column: 1 },
+      },
+    ];
+
+    const result = analyzeCase(translations, usages);
+    expect(result.missingKeys).toEqual([]);
+    expect(result.extraKeys).toEqual([]);
+  });
+
+  it("marks CLDR suffix keys as used (not extra)", () => {
+    const translations = makeTranslations([
+      { key: "hours_one" },
+      { key: "hours_few" },
+      { key: "hours_many" },
+      { key: "unused_key" },
+    ]);
+    const usages: Usage[] = [
+      {
+        base: "hours",
+        kind: "staticPlural",
+        hasContext: false,
+        hasPlural: true,
+        location: { filePath: "src/App.tsx", line: 1, column: 1 },
+      },
+    ];
+
+    const result = analyzeCase(translations, usages);
+    expect(result.missingKeys).toEqual([]);
+    expect(result.extraKeys).toEqual(["unused_key"]);
+  });
+
+  it("still reports missing plural when no CLDR suffix forms exist", () => {
+    const translations = makeTranslations([{ key: "points" }]);
+    const usages: Usage[] = [
+      {
+        base: "points",
+        kind: "staticPlural",
+        hasContext: false,
+        hasPlural: true,
+        location: { filePath: "src/App.tsx", line: 1, column: 1 },
+      },
+    ];
+
+    const result = analyzeCase(translations, usages);
+    expect(result.missingKeys).toEqual(["points"]);
+    expect(result.missingKeyUsageTypes["points"]).toBe("plural");
+  });
+
+  it("reports missing singular+plural when no keys exist at all", () => {
+    const translations = makeTranslations([]);
+    const usages: Usage[] = [
+      {
+        base: "missing",
+        kind: "staticPlural",
+        hasContext: false,
+        hasPlural: true,
+        location: { filePath: "src/App.tsx", line: 1, column: 1 },
+      },
+    ];
+
+    const result = analyzeCase(translations, usages);
+    expect(result.missingKeys).toEqual(["missing"]);
+    expect(result.missingKeyUsageTypes["missing"]).toBe("singular, plural");
+  });
+
+  it("handles both simple t() and plural t() with suffix keys", () => {
+    const translations = makeTranslations([
+      { key: "days_one" },
+      { key: "days_few" },
+      { key: "days_many" },
+    ]);
+    const usages: Usage[] = [
+      {
+        base: "days",
+        kind: "simple",
+        hasContext: false,
+        hasPlural: false,
+        location: { filePath: "src/App.tsx", line: 1, column: 1 },
+      },
+      {
+        base: "days",
+        kind: "staticPlural",
+        hasContext: false,
+        hasPlural: true,
+        location: { filePath: "src/App.tsx", line: 2, column: 1 },
+      },
+    ];
+
+    const result = analyzeCase(translations, usages);
+    // Simple t("days") requires bare "days" key which doesn't exist
+    expect(result.missingKeys).toEqual(["days"]);
+    expect(result.missingKeyUsageTypes["days"]).toBe("singular");
+  });
+
+  it("handles context+plural with CLDR suffixes (e.g. base_context_one)", () => {
+    const translations = makeTranslations([
+      { key: "period_day_one" },
+      { key: "period_day_few" },
+      { key: "period_day_many" },
+      { key: "period_week_one" },
+      { key: "period_week_few" },
+      { key: "period_week_many" },
+    ]);
+    const usages: Usage[] = [
+      {
+        base: "period",
+        kind: "dynamicContext",
+        hasContext: true,
+        hasPlural: true,
+        location: { filePath: "src/App.tsx", line: 1, column: 1 },
+      },
+    ];
+
+    const result = analyzeCase(translations, usages);
+    expect(result.missingKeys).toEqual([]);
+    expect(result.extraKeys).toEqual([]);
+  });
+
+  it("handles static context+plural with CLDR suffixes", () => {
+    const translations = makeTranslations([
+      { key: "period_day_one" },
+      { key: "period_day_few" },
+      { key: "period_day_many" },
+    ]);
+    const usages: Usage[] = [
+      {
+        base: "period",
+        kind: "staticContext",
+        contextLiteral: "day",
+        hasContext: true,
+        hasPlural: true,
+        location: { filePath: "src/App.tsx", line: 1, column: 1 },
+      },
+    ];
+
+    const result = analyzeCase(translations, usages);
+    expect(result.missingKeys).toEqual([]);
+    expect(result.extraKeys).toEqual([]);
+  });
+});
+
 describe("analyzer - combined plural and context", () => {
   it("prioritizes plural handling when both count and context are present", () => {
     const translations = makeTranslations([

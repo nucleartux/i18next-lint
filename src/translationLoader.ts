@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { TranslationKeyMeta, BaseKeyInfo, PluralStyle } from "./types";
 
+const CLDR_PLURAL_SUFFIXES = new Set(["zero", "one", "two", "few", "many", "other"]);
+
 export interface LoadedTranslations {
   baseMap: Map<string, BaseKeyInfo>;
   meta: TranslationKeyMeta[];
@@ -32,6 +34,11 @@ export function parseTranslationKey(
         // For numeric plural styles, treat everything before the numeric
         // suffix as the base, so keys like "ratings_count_0" are grouped
         // under the "ratings_count" base.
+        base = parts.slice(0, -1).join(sep);
+      }
+    } else if (pluralStyle === "suffix") {
+      if (CLDR_PLURAL_SUFFIXES.has(last)) {
+        isPlural = true;
         base = parts.slice(0, -1).join(sep);
       }
     }

@@ -35,6 +35,30 @@ describe("parseTranslationKey", () => {
     expect(meta.base).toBe("ratings_count");
     expect(meta.isPlural).toBe(true);
   });
+
+  it("parses suffix plural forms (_one, _few, _many, _other)", () => {
+    for (const suffix of ["zero", "one", "two", "few", "many", "other"]) {
+      const meta = parseTranslationKey(`item_${suffix}`, "/fake/ru.json", "_", "suffix");
+      expect(meta.base).toBe("item");
+      expect(meta.isPlural).toBe(true);
+    }
+  });
+
+  it("parses suffix plural with multi-part base (e.g. label_clinics_count_one)", () => {
+    const meta = parseTranslationKey("label_clinics_count_one", "/fake/ru.json", "_", "suffix");
+    expect(meta.base).toBe("label_clinics_count");
+    expect(meta.isPlural).toBe(true);
+  });
+
+  it("does not mark non-CLDR suffixes as plural in suffix style", () => {
+    const meta = parseTranslationKey("item_active", "/fake/ru.json", "_", "suffix");
+    expect(meta.isPlural).toBe(false);
+  });
+
+  it("does not mark _plural as plural in suffix style", () => {
+    const meta = parseTranslationKey("item_plural", "/fake/ru.json", "_", "suffix");
+    expect(meta.isPlural).toBe(false);
+  });
 });
 
 describe("loadTranslationFiles", () => {

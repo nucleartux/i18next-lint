@@ -1,4 +1,4 @@
-export type PluralStyle = "simple" | "numeric";
+export type PluralStyle = "simple" | "numeric" | "suffix";
 
 export interface TranslationConfigEntry {
   /**
@@ -14,6 +14,7 @@ export interface TranslationConfigEntry {
    *
    * - "simple": keys like "item" and "item_plural"
    * - "numeric": keys like "item_0", "item_1", "item_2", ...
+   * - "suffix": i18next v4 CLDR suffixes like "item_one", "item_few", "item_many", "item_other"
    *
    * Default: "simple"
    */
