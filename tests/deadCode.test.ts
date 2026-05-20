@@ -10,6 +10,7 @@ const fixturesDynamicAwait = join(import.meta.dir, "fixtures", "project-dead-cod
 const fixturesRoutes = join(import.meta.dir, "fixtures", "project-dead-code-routes");
 const fixturesDynamicUnused = join(import.meta.dir, "fixtures", "project-dead-code-dynamic-unused");
 const fixturesHoc = join(import.meta.dir, "fixtures", "project-dead-code-hoc");
+const fixturesReexport = join(import.meta.dir, "fixtures", "project-dead-code-reexport");
 
 describe("dead code detection", () => {
   it("reports key2 and comp2 as extra (dead code)", () => {
@@ -27,6 +28,16 @@ describe("dead code detection", () => {
     const { result } = analyzeProject(resolved);
     expect(result.missingKeys).toEqual([]);
     expect(result.extraKeys).toEqual([]);
+  });
+});
+
+describe("dead code detection - re-exports", () => {
+  it("named re-export: export { X } from './module' propagates used exports to source module", () => {
+    const configPath = join(fixturesReexport, "i18next-lint.config.json");
+    const [resolved] = loadConfig(configPath);
+    const { result } = analyzeProject(resolved);
+    expect(result.missingKeys).toEqual([]);
+    expect(result.extraKeys.sort()).toEqual(["dead_key"]);
   });
 });
 

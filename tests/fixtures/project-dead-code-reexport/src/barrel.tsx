@@ -1,0 +1,1 @@
+export { ReexportedComponent } from "./components";

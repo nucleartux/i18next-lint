@@ -260,8 +260,57 @@ export function computeUsedExports(
     }
   }
 
+  propagateReExports(files, usedExports, rootDir, cache);
   traverseUsedExportValues(files, usedExports, rootDir, cache);
   return usedExports;
+}
+
+/**
+ * Propagate used export names through re-export chains.
+ * When file A re-exports `export { X } from "./B"` and X is used from A,
+ * mark X as used in B as well.
+ */
+function propagateReExports(
+  files: string[],
+  usedExports: Map<string, Set<string>>,
+  rootDir: string,
+  cache: SourceFileCache,
+): void {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const filePath of files) {
+      const fileUsedExports = usedExports.get(filePath);
+      if (!fileUsedExports || fileUsedExports.size === 0) continue;
+
+      const sf = getOrParse(filePath, cache);
+      for (const stmt of sf.statements) {
+        if (!ts.isExportDeclaration(stmt) || !stmt.moduleSpecifier || !ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+
+        const specifier = stmt.moduleSpecifier.text;
+        const resolved = resolveModule(filePath, specifier, { rootDir, extensions: DEFAULT_EXTENSIONS });
+        if (!resolved || !usedExports.has(resolved)) continue;
+
+        const targetUsedExports = usedExports.get(resolved)!;
+
+        if (stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+          for (const el of stmt.exportClause.elements) {
+            const exportedName = el.name.text;
+            const originalName = el.propertyName ? el.propertyName.text : el.name.text;
+            if (fileUsedExports.has(exportedName) && !targetUsedExports.has(originalName)) {
+              targetUsedExports.add(originalName);
+              changed = true;
+            }
+          }
+        } else if (!stmt.exportClause) {
+          if (!targetUsedExports.has("*")) {
+            targetUsedExports.add("*");
+            changed = true;
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
